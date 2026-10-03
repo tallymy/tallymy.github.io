@@ -10,7 +10,9 @@ async function ready() {
   const { Ocr, env } = await import('../vendor/ocr.js');
   env.wasm.wasmPaths = new URL('../vendor/', import.meta.url).href;
   // Several cores once the page is cross-origin isolated (sw.js adds the headers GitHub Pages can't); one otherwise.
-  env.wasm.numThreads = self.crossOriginIsolated ? Math.min(4, navigator.hardwareConcurrency || 1) : 1;
+  // Android WebView's new isolation API does not yet reliably start nested WASM pthread workers.
+  // Keep OCR in this background worker, but use a single WASM thread inside the Android app.
+  env.wasm.numThreads = new URL(self.location.href).searchParams.get('threads') === '1' ? 1 : self.crossOriginIsolated ? Math.min(4, navigator.hardwareConcurrency || 1) : 1;
   ocr = await Ocr.create({ models: {
     detectionPath: new URL('../models/ch_PP-OCRv4_det_infer.onnx', import.meta.url).href,
     recognitionPath: new URL('../models/ch_PP-OCRv4_rec_infer.onnx', import.meta.url).href,

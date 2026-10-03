@@ -5,7 +5,7 @@
 import { S, settings, setSetting, cat, putAll, uid, today as todayIso } from '../state.js';
 import { t, fmtDate } from '../i18n.js';
 import { esc, openSheet, closeSheet, toast } from '../ui.js';
-import { fmtRM, allocate, isFx, calcAmount } from '../engine.js';
+import { fmtRM, allocate, isFx, calcAmount, validIso } from '../engine.js';
 import { typedShift } from '../io.js';
 import { send, caption } from '../share.js';
 
@@ -39,7 +39,7 @@ export function original(tx) {
   return { ...o, amount: split.total, ...(split.acc ? { accountId: split.acc } : {}), ...(split.items ? { items: split.items } : {}) };
 }
 /** The lines the sheet splits: the receipt's items plus a tax & service line, or the payment as one. */
-const linesOf = o => {
+export const linesOf = o => {
   if (!o.items?.length) return [{ name: o.merchant || t(cat(o.category).name), cents: o.amount }];
   const lines = o.items.map(i => ({ name: i.name || t(cat(i.category).name), cents: i.cents }));
   const left = o.amount - lines.reduce((s, i) => s + i.cents, 0);
@@ -60,7 +60,7 @@ export function splitRows({ tx, people, who, paidBy = ME, paid, shop = tx.mercha
   // less what they put down. I'm short: my debt goes to the friend who put down the most over their share (several
   // overpaid: they settle between themselves, like the other friends always did). I'm over: the short friends owe me.
   const paidMap = paid || { [paidBy]: o.amount };
-  if (Object.values(paidMap).reduce((s, v) => s + v, 0) !== o.amount) throw new Error('paid must add up to the bill');
+  if (Object.entries(paidMap).some(([p, v]) => !people.includes(p) || !Number.isSafeInteger(v) || v < 0) || Object.values(paidMap).reduce((s, v) => s + v, 0) !== o.amount) throw new Error('paid must add up to the bill');
   const net = p => (owe[p] || 0) - (paidMap[p] || 0), myNet = net(ME), friendPaid = myNet > 0;
   const payer = friendPaid ? friends.reduce((a, b) => (net(b) < net(a) ? b : a)) : null;
   const made = [], acct = kind => accounts.find(a => a.kind === kind) || made.find(a => a.kind === kind)
@@ -205,8 +205,23 @@ function picture(tx, items, who, people, owe, name) {
   y += 8;
   for (const p of people) {
     line(name(p), fmtRM(owe[p]), { size: 26, weight: 700, color: '#1E40AF' });
-    line(items.filter((_, n) => (who[n].length ? who[n] : people).includes(p)).map(i => i.name).join(', ') || t('Nothing'), '', { size: 20, color: '#55607A' });
+    line(items.filter((it, n) => (who[n].length ? who[n] : it.extra ? [] : people).includes(p)).map(i => i.name).join(', ') || t('Nothing'), '', { size: 20, color: '#55607A' });
   }
   line(t('Split with Tally · tallymy.github.io'), '', { size: 18, color: '#8A94A8' });
   return new Promise(r => c.toBlob(r, 'image/png'));
+}
+
+/** A repayment, including an optional treat, as a single atomic write. Values are integer sen. */
+export function repayRows({ kind, name, amount, total, boxId, accountId, date, treat = false, accounts = S.accounts, txs = S.tx, today = todayIso(), now = Date.now(), note = t('My treat') }) {
+  if (!['owedme', 'iowe'].includes(kind) || !Number.isSafeInteger(total) || total <= 0 || !Number.isSafeInteger(amount) || amount < 0 || amount > total || (!amount && !(treat && kind === 'owedme')) || (treat && kind !== 'owedme') || !validIso(date) || date > today) throw new Error('Invalid repayment');
+  if (!accounts.some(a => a.id === boxId && a.kind === kind) || !accounts.some(a => a.id === accountId && !['owedme', 'iowe'].includes(a.kind))) throw new Error('Invalid repayment account');
+  const back = kind === 'owedme', tx = [];
+  const transfer = value => ({ id: uid('t'), type: 'transfer', date, amount: value, accountId: back ? boxId : accountId, toAccountId: back ? accountId : boxId, category: 'other', merchant: name, [back ? 'repaidBy' : 'repaidTo']: name, source: 'quick', createdAt: now });
+  if (amount) tx.push(transfer(amount));
+  if (treat && total > amount) {
+    tx.push(transfer(total - amount));
+    tx.push({ id: uid('t'), type: 'expense', date, amount: total - amount, accountId, category: 'other', merchant: name, note, source: 'quick', createdAt: now });
+  }
+  const typed = accounts.filter(a => a.typed), shift = typedShift(typed, txs, tx, today);
+  return { tx, accounts: typed.filter(a => shift[a.id]).map(a => ({ ...a, opening: (a.opening || 0) + shift[a.id], updatedAt: now })), edit: true };
 }

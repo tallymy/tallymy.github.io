@@ -8,7 +8,7 @@ console.warn = () => {};   // db.js logs each failed save
 const disk = new Map();
 globalThis.localStorage = { getItem: k => disk.get(k) ?? null, setItem: (k, v) => { if (full) throw new Error('QuotaExceededError'); disk.set(k, String(v)); } };
 const { S, load, saveAccount, saveTx, replaceAll } = await import('../js/state.js');
-const { splitBill, splitShares, saveSplit, ME } = await import('../js/views/splitbill.js');
+const { splitBill, splitShares, saveSplit, linesOf, repayRows, ME } = await import('../js/views/splitbill.js');
 const { balances, monthSpend, taxRelief, openShares, itemAmounts, leftOverPaybacks } = await import('../js/engine.js');
 const { readBackup, makeBackup } = await import('../js/io.js');
 
@@ -216,4 +216,67 @@ test('deleting a split bill takes off what was paid back for it, and only what n
   // A duplicate bill: the payback still settles the one that's left, so nothing changes.
   const dup = [share('d1', 'X', 'Aisyah', 4675), share('d2', 'Y', 'Aisyah', 4675), back('r', 'Aisyah', 4675, '2026-09-20')];
   assert.deepEqual(leftOverPaybacks(dup, ['Y', 'd2']), { drop: [], trim: [] });
+});
+
+test('two payers: my overpayment is the only amount friends owe me', async () => {
+  await fresh({ amount: 9000 });
+  await saveSplit({ tx: billRow(), people: [ME, 'Ali', 'Siti'], who: [[]], paid: { [ME]: 6000, Ali: 3000 }, today: TODAY });
+  assert.equal(balances(S.accounts, S.tx).by.bank, 44000);
+  assert.deepEqual(openShares(S.tx).owedMe.map(x => [x.name, x.sen]), [['Siti', 3000]]);
+  assert.equal(monthSpend(S.tx, '2026-09').total, 3000);
+  const backup = readBackup(makeBackup({ accounts: S.accounts, tx: S.tx, recurring: [], kv: {} }));
+  assert.deepEqual(backup.tx.find(x => x.id === 'bill').split.paid, { '': 6000, Ali: 3000 });
+});
+
+test('two payers: my partial payment reduces my debt and leaves the correct bank balance', async () => {
+  await fresh({ amount: 9000 });
+  await saveSplit({ tx: billRow(), people: [ME, 'Ali', 'Siti'], who: [[]], paid: { [ME]: 1000, Ali: 8000 }, today: TODAY });
+  const b = billRow(), down = shares();
+  assert.equal(b.amount, 3000);
+  assert.equal(down.length, 1);
+  assert.deepEqual([down[0].amount, down[0].repaidTo], [1000, 'Ali']);
+  assert.equal(balances(S.accounts, S.tx).by.bank, 49000);
+  assert.deepEqual(openShares(S.tx).iOwe.map(x => [x.name, x.sen]), [['Ali', 2000]]);
+  assert.deepEqual(leftOverPaybacks(S.tx, [b.id, ...down.map(x => x.id)]), { drop: [], trim: [] });
+  await saveSplit({ tx: b, people: [ME, 'Ali', 'Siti'], who: [[]], paidBy: ME, today: TODAY });
+  assert.ok(!S.tx.some(x => x.repaidTo));
+  assert.equal(balances(S.accounts, S.tx).by.bank, 41000);
+});
+
+test('tax line: assigning it charges that person, leaving it untapped spreads it by food cost', () => {
+  const items = linesOf({ amount: 11000, items: [{ name: 'Mine', cents: 4000 }, { name: 'Ali', cents: 6000 }] });
+  assert.equal(items[2].extra, true);
+  assert.deepEqual(splitBill(items, 11000, [[ME], ['Ali'], []], [ME, 'Ali']), { [ME]: 4400, Ali: 6600 });
+  assert.deepEqual(splitBill(items, 11000, [[ME], ['Ali'], [ME]], [ME, 'Ali']), { [ME]: 5000, Ali: 6000 });
+});
+
+test('my treat: partial repayment settles the full debt, counts the rest as spending, and keeps real cash correct', () => {
+  const accounts = [{ id: 'bank', kind: 'bank', opening: 10000 }, { id: 'owed', kind: 'owedme', opening: 0 }];
+  const debt = { id: 'debt', type: 'transfer', date: '2026-09-01', amount: 3000, accountId: 'bank', toAccountId: 'owed', owedBy: 'Ali' };
+  const rows = repayRows({ kind: 'owedme', name: 'Ali', amount: 1000, total: 3000, boxId: 'owed', accountId: 'bank', date: TODAY, treat: true, accounts, txs: [debt], today: TODAY });
+  const tx = [debt, ...rows.tx];
+  assert.deepEqual(openShares(tx).owedMe, []);
+  assert.equal(balances(accounts, tx).by.bank, 8000);
+  assert.equal(balances(accounts, tx).by.owed, 0);
+  assert.equal(monthSpend(tx, '2026-10').total, 2000);
+  assert.throws(() => repayRows({ kind: 'iowe', name: 'Ali', amount: 1000, total: 3000, treat: true, date: TODAY, today: TODAY }));
+});
+
+test('my treat can forgive all of a debt; a normal payment cannot be zero or exceed the debt', () => {
+  const options = { kind: 'owedme', name: 'Ali', total: 3000, boxId: 'owed', accountId: 'bank', date: TODAY, today: TODAY, accounts: [{ id: 'bank', kind: 'bank' }, { id: 'owed', kind: 'owedme' }], txs: [] };
+  const r = repayRows({ ...options, amount: 0, treat: true });
+  assert.deepEqual(r.tx.map(x => [x.type, x.amount]), [['transfer', 3000], ['expense', 3000]]);
+  assert.throws(() => repayRows({ ...options, amount: 0 }));
+  assert.throws(() => repayRows({ ...options, amount: 3001 }));
+});
+
+test('my treat writes all rows together: a failed save cannot leave the debt half settled', async () => {
+  await fresh({ amount: 6000 });
+  await saveSplit({ tx: billRow(), people: [ME, 'Ali'], who: [[]], today: TODAY });
+  const { putAll } = await import('../js/state.js');
+  const box = S.accounts.find(a => a.kind === 'owedme');
+  const rows = repayRows({ kind: 'owedme', name: 'Ali', amount: 1000, total: 3000, boxId: box.id, accountId: 'bank', date: TODAY, treat: true, today: TODAY });
+  const before = JSON.stringify([S.accounts, S.tx]); full = true;
+  try { await assert.rejects(putAll(rows)); } finally { full = false; }
+  await load(); assert.equal(JSON.stringify([S.accounts, S.tx]), before);
 });

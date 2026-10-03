@@ -7,6 +7,10 @@ import { isNative } from './native.js';
 
 // Newest first. Written for users; each line is translated.
 export const WHATS_NEW = {
+  '1.13.0': [
+    'Split bills with several payers, assign tax and service, or treat a friend to the unpaid rest',
+    'The Android app keeps your data in its own storage and opens files shared from other apps',
+  ],
   '1.12.4': [
     "Clearer, more natural wording in Bahasa Melayu, 中文, 繁體中文, 日本語 and தமிழ்",
     "Saved stickers are much smaller, so they send faster",

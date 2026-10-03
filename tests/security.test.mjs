@@ -33,7 +33,7 @@ test('no inline scripts in any page', () => {
 
 test('network calls: only the feedback form, a pasted Google Sheets link and a tapped exchange-rate lookup', () => {
   const calls = jsFiles('js').flatMap(f => [...read(f).matchAll(/\bfetch\(([^,)]+)/g)].map(m => `${f.replace(/\\/g, '/')}:${m[1].trim()}`));
-  assert.deepEqual(calls.sort(), ['js/feedback.js:FORM', 'js/scan.js:url', "js/views/setup.js:'./build.txt'", 'js/views/setup.js:rateUrl', 'js/views/setup.js:url']);   // build.txt: this site's own file
+  assert.deepEqual(calls.sort(), ['js/feedback.js:FORM', 'js/native.js:url.href', 'js/scan.js:url', "js/views/setup.js:'./build.txt'", 'js/views/setup.js:rateUrl', 'js/views/setup.js:url']);   // build.txt: this site's own file
   assert.ok(read('js/views/setup.js').includes("const RATE_API = 'https://api.frankfurter.dev/v1/latest';"));   // one rate, no data about the person
   assert.ok(read('js/views/setup.js').includes("'rate-get': async () => {"));   // only from the button
   // the reader's own files, from this site only

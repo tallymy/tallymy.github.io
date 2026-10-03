@@ -123,6 +123,7 @@ export const welcomeView = {
       <button class="btn ghost wide" data-act="sample-go">${esc(t('Not sure yet? Look around with sample data'))}</button>
       <button class="btn ghost wide" data-act="import-open">${esc(t('Bring my data: bank or e-wallet statements (MAE, TNG, Grab…), other money apps, Excel'))}</button>
       <button class="btn ghost wide" data-act="restore-pick">${esc(t('Restore a Tally backup'))}</button>
+      ${isNative ? `<p class="fine">${esc(t('Moving from the website? Back up there, then restore that file here.'))}</p>` : ''}
       ${whyFree()}
       <div class="langrow"><div class="sizerow"><span class="fine">${esc(t('Text size'))}</span>${sizeButtons()}</div></div>
       <p class="fine">${esc(t('By using Tally you agree to the Terms of use and have read the Privacy policy.'))}</p>
@@ -246,7 +247,7 @@ export const settingsView = {
       <section class="card" id="backup"><h2 id="s-backup">${esc(t('Backup'))}</h2>
         <p class="fine">${esc(last ? t('Last backup: {0}', last.slice(0, 10)) : t('Not backed up yet'))} · ${esc(t('Tally keeps everything on this phone. Save a backup file to Google Drive or email it to yourself.'))}</p>
         <div class="row2"><button class="btn" data-act="backup">${ICON.download}${esc(t('Back up now'))}</button><button class="btn ghost" data-act="restore-pick">${esc(t('Restore'))}</button></div>
-        <p class="warnbox">${ICON.alert}<span>${esc(t('Uninstalling Tally or clearing its site data deletes your Tally entries, accounts and receipt photos from this phone. Back up first.'))} <button class="link" data-act="storage-info">${esc(t('How your data is kept'))}</button></span></p>
+        <p class="warnbox">${ICON.alert}<span>${esc(isNative ? t('Uninstalling Tally, clearing its app data, or resetting this phone deletes your entries, accounts and receipt photos. Back up first.') : t('Uninstalling Tally or clearing its site data deletes your Tally entries, accounts and receipt photos from this phone. Back up first.'))} <button class="link" data-act="storage-info">${esc(t('How your data is kept'))}</button></span></p>
         ${storage.persisted == null ? '' : `<p class="fine">${esc(storage.persisted ? t('Storage: protected. The browser will not clear Tally to free up space.') : t('If the phone runs out of space, the browser may clear Tally. A backup file keeps you safe.'))}</p>`}</section>
       <section class="card" id="s-data"><h2>${esc(t('Import & export'))}</h2><p class="fine">${esc(t('From Money Manager, Money Lover, Spendee, Wallet, Monefy, YNAB, Cashew, Bluecoins, 1Money, Toshl or AndroMoney, Excel, CSV, a bank statement, or Google Sheets.'))}</p>
         <button class="btn ghost wide" data-act="import-open">${ICON.upload}${esc(t('Import'))}</button>
@@ -1119,9 +1120,9 @@ export const act = {
     const li = (icon, s) => `<li>${icon}<span>${esc(s)}</span></li>`;
     openSheet(`<h2 class="sh-title">${esc(t('How your data is kept'))}</h2>
       <ul class="points">
-        ${li(ICON.wallet, t('Only on this phone, in the storage of the browser Tally runs in. It is not copied to a server or to your other devices: no one can bring it back, not even us.'))}
+        ${li(ICON.wallet, isNative ? t('Your data stays in this app on this phone. Clearing your browser data does not delete it. Nothing is copied to a server or your other devices.') : t('Only on this phone, in the storage of the browser Tally runs in. It is not copied to a server or to your other devices: no one can bring it back, not even us.'))}
         ${li(ICON.check, t('What is kept: your accounts, entries, receipt photos, budgets, bills, categories and settings.'))}
-        ${li(ICON.alert, t("Deleted by: uninstalling Tally, clearing the browser's data for Tally, cleaner apps, a phone reset."))}
+        ${li(ICON.alert, isNative ? t('Uninstalling Tally, clearing its app data, or resetting this phone deletes your entries, accounts and receipt photos. Back up first.') : t("Deleted by: uninstalling Tally, clearing the browser's data for Tally, cleaner apps, a phone reset."))}
         ${iosBrowser() ? li(ICON.plusSquare, t("On iPhone, keep Tally on the Home Screen: Safari clears web apps it hasn't seen for 7 days.")) : ''}
         ${li(ICON.check, t('Safe: closing, restarting, updates, offline.'))}
         ${li(ICON.upload, t('New phone? Back up, then restore there.'))}

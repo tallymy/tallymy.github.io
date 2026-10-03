@@ -1,7 +1,7 @@
 // Minimal in-memory IndexedDB for tests, plus "tabs": separate copies of state.js/db.js sharing it and the BroadcastChannel.
 // Transactions run one at a time in creation order (a legal schedule). deleteDatabase tells every open connection
 // (versionchange) and a closed connection refuses new transactions, as in a browser.
-import { mkdtempSync, mkdirSync, copyFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, copyFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
@@ -73,12 +73,13 @@ globalThis.indexedDB = indexedDB;
 export const rows = (store, name = 'tally') => [...(dbs[name]?.[store]?.map.values() || [])];
 export const reset = () => { for (const k in dbs) delete dbs[k]; for (const k in conns) delete conns[k]; };
 
-const JS = fileURLToPath(new URL('../../js/', import.meta.url)), FILES = ['state.js', 'db.js', 'io.js', 'engine.js', 'caticons.js', 'lock.js', 'ui.js', 'i18n.js'];
+const JS = fileURLToPath(new URL('../../js/', import.meta.url)), FILES = ['native.js', 'state.js', 'db.js', 'io.js', 'engine.js', 'caticons.js', 'lock.js', 'ui.js', 'i18n.js'];
 let n = 0;
 /** Another tab (or a restart): its own state.js and db.js, sharing the database and change notices. */
 export async function tab() {
   const dir = join(mkdtempSync(join(tmpdir(), 'tally-tab-')), `t${n++}`);
   mkdirSync(dir);
+  writeFileSync(join(dir, 'package.json'), '{"type":"module"}');
   for (const f of FILES) copyFileSync(join(JS, f), join(dir, f));
   const at = f => import(pathToFileURL(join(dir, f)).href);
   return { S: await at('state.js'), db: await at('db.js'), lock: () => at('lock.js') };   // the lock screen's code, on this tab's state

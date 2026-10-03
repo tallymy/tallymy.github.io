@@ -1,5 +1,6 @@
 // Reading a receipt photo on the phone: PaddleOCR (vendored, ~30 MB, loaded on first scan and cached offline),
 // then the Malaysian receipt parser. Nothing is uploaded.
+import { isNative } from './native.js';
 import { parseReceipt, rowsOf } from './parse.js';
 import { imageInfo, LIMITS } from './io.js';
 
@@ -45,7 +46,9 @@ async function prefetch() {
 export function loadOcr() {
   loading ||= (async () => {
     await prefetch();
-    worker = new Worker(new URL('./ocr-worker.js', import.meta.url), { type: 'module' });
+    const workerUrl = new URL('./ocr-worker.js', import.meta.url);
+    if (isNative) workerUrl.searchParams.set('threads', '1');
+    worker = new Worker(workerUrl, { type: 'module' });
     worker.onmessage = ({ data }) => { const p = pending.get(data.id); if (!p) return; if (data.stage) return p.stage(data.stage); pending.delete(data.id); data.error ? p.reject(new Error(data.error)) : p.resolve(data); };
     worker.onerror = e => { e.preventDefault?.(); const err = new Error(e.message || 'The receipt reader failed to start.'); for (const p of pending.values()) p.reject(err); pending.clear(); reset(); };
     await call(null); // warm up: loads the models

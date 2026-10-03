@@ -1,5 +1,6 @@
 // Home (balance, month, one banner, recent) and Insights (charts, habits, the insight feed).
 import { S, today, nowLocal, nowTime, settings, setKv, setSetting, cat, booked, scopedAccounts, budgetsFor, inScope, startDay, thisMonth, cached, OLD_HOME, NEW_HOME, wipeSite, saveTx, keepToday, uid, defaultAccount, putAll } from '../state.js';
+import { repayRows } from './splitbill.js';
 import { t, fmtDate, fmtMonth, monShort, cycleShort, getLang } from '../i18n.js';
 import { esc, ICON, MASK, balHidden, eyeBtn, lineChart, pairBars, donut, openSheet, toast, countUp, replay, landing, $, confirmSheet, closeSheet, landed } from '../ui.js';
 import { firstSpend, fmtRM, balances, monthOf, monthSpend, monthSpends, monthIncomes, addMonths, pace, cashFlow, balanceTrend, insights, habits, dueNudge, daysBetween, itemKey, cycleKey, cycleSpan, billStatus, newest, fmtAcct, offTotal, isFx, rateOf, belowSince, CATEGORIES, affordCheck, topCats, calcAmount, recurringCandidates, owing, openShares, validIso, affordMoney } from '../engine.js';
@@ -313,18 +314,20 @@ function repaySheet(kind, name) {
   el.addEventListener('click', async e => {
     const b = e.target.closest('[data-x="save"]'); if (!b) return;
     const amount = el.querySelector('#rp-amt').value.trim() === '' ? 0 : calcAmount(el.querySelector('#rp-amt').value), date = el.querySelector('#rp-date').value, acc = el.querySelector('#rp-acc').value, err = m => { el.querySelector('#rp-err').textContent = m; };
-    const halal = !!el.querySelector('#rp-halal')?.checked, rest = f.sen - (amount || 0);
+    const halal = !!el.querySelector('#rp-halal')?.checked;
     if (!(amount > 0) && !(halal && amount === 0)) return err(t('Enter an amount, for example 12.50.'));
     if (amount > f.sen) return err(t('At most {0}.', fmtRM(f.sen)));   // more back than is owed would be money from nowhere
     if (!validIso(date) || date > tdy) return err(t('Pick a date.'));
     b.disabled = true;
-    const x = amount > 0 ? { id: uid('t'), type: 'transfer', date, amount, accountId: back ? box.id : acc, toAccountId: back ? acc : box.id, category: 'other', merchant: name, [back ? 'repaidBy' : 'repaidTo']: name, source: 'quick', createdAt: Date.now() } : null;
-    if (x) { await saveTx(x); await keepToday(x); }
-    // The rest let go: as if the friend paid it back and I spent it on them, so nothing stays open and it's my spending.
-    if (halal && rest > 0) await putAll({ tx: [
-      { id: uid('t'), type: 'transfer', date, amount: rest, accountId: box.id, toAccountId: acc, category: 'other', merchant: name, repaidBy: name, source: 'quick', createdAt: Date.now() },
-      { id: uid('t'), type: 'expense', date, amount: rest, accountId: acc, category: 'other', merchant: name, note: t('My treat'), source: 'quick', createdAt: Date.now() },
-    ], edit: true });
+    let rows;
+    try {
+      rows = repayRows({ kind, name, amount, total: f.sen, boxId: box.id, accountId: acc, date, treat: halal, today: tdy });
+      await putAll(rows);
+    } catch (error) {
+      console.error(error); b.disabled = false;
+      return err(t('Could not save. Your phone may be out of space.'));
+    }
+    const x = rows.tx[0];
     closeSheet(); if (x) landed(x.id); render(); toast(t('Saved'), { icon: 'check' });
   });
 }

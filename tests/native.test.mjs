@@ -64,3 +64,40 @@ test('inside the app: a big file is written in whole base64 chunks and handed to
   assert.equal(globalThis.navigator.canShare({ files: [new File(['x'], 'a.json')] }), true, 'the share sheet is offered');
   delete globalThis.Capacitor; delete globalThis.document; delete globalThis.window; delete globalThis.navigator.share; delete globalThis.navigator.canShare;
 });
+
+test('external links use the native intent bridge, and an unavailable handler returns false', async () => {
+  const opened = [];
+  globalThis.Capacitor = { isNativePlatform: () => true, Plugins: { TallyNative: { openExternal: async o => opened.push(o.url) } } };
+  globalThis.document = { addEventListener() {} }; globalThis.window = { open() {} };
+  const n = await import('../js/native.js?links');
+  assert.equal(await n.openExternal('mailto:a@example.com'), true);
+  assert.deepEqual(opened, ['mailto:a@example.com']);
+  globalThis.Capacitor.Plugins.TallyNative.openExternal = async () => { throw Error('No handler'); };
+  assert.equal(await n.openExternal('mailto:a@example.com'), false);
+  delete globalThis.Capacitor; delete globalThis.document; delete globalThis.window;
+  delete globalThis.navigator.share; delete globalThis.navigator.canShare;
+});
+
+test('share intake reads only local cache URLs, and skips failed reads', async () => {
+  const fetched = [];
+  const oldFetch = globalThis.fetch;
+  globalThis.Capacitor = { isNativePlatform: () => true, convertFileSrc: uri => uri, Plugins: { TallyNative: { takeShared: async () => ({ files: [
+    { uri: 'https://localhost/_capacitor_file_/cache/shared/receipt', name: 'receipt.jpg', type: 'image/jpeg' },
+    { uri: 'https://evil.example/receipt', name: 'evil' },
+    { uri: 'https://localhost/js/app.js', name: 'source' },
+    { uri: 'https://localhost/_capacitor_file_/cache/shared/missing', name: 'missing' },
+  ] }) } } };
+  globalThis.document = { addEventListener() {} }; globalThis.window = { open() {} };
+  globalThis.fetch = async url => { fetched.push(url); return new Response('receipt', { status: url.endsWith('missing') ? 404 : 200 }); };
+  try {
+    const n = await import('../js/native.js?shared');
+    const files = await n.sharedFiles();
+    assert.equal(files.length, 1); assert.equal(files[0].name, 'receipt.jpg');
+    assert.equal(await files[0].text(), 'receipt');
+    assert.equal(fetched.length, 2);
+    assert.ok(fetched.every(url => url.startsWith('https://localhost/_capacitor_file_/')));
+  } finally {
+    globalThis.fetch = oldFetch; delete globalThis.Capacitor; delete globalThis.document; delete globalThis.window;
+    delete globalThis.navigator.share; delete globalThis.navigator.canShare;
+  }
+});

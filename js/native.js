@@ -13,7 +13,7 @@ export function external(href) {
 }
 /** A web page, a mail or a calendar link in the phone's own app. */
 export async function openExternal(url) {
-  try { await plugin('App').openUrl({ url }); return true; } catch { return false; }
+  try { await plugin('TallyNative').openExternal({ url }); return true; } catch { return false; }
 }
 
 const b64 = async blob => {
@@ -44,7 +44,13 @@ export async function sharedFiles() {
   const { files = [] } = (await plugin('TallyNative').takeShared().catch(() => null)) || {};
   const out = [];
   for (const f of files) {
-    try { out.push(new File([await (await fetch(cap.convertFileSrc(f.uri))).blob()], f.name || 'shared', { type: f.type || '' })); } catch { /* one unreadable file: skip it */ }
+    try {
+      const url = new URL(cap.convertFileSrc(f.uri), location.href);
+      if (url.origin !== location.origin || !url.pathname.startsWith('/_capacitor_file_')) continue;
+      const response = await fetch(url.href);
+      if (!response.ok) continue;
+      out.push(new File([await response.blob()], f.name || 'shared', { type: f.type || '' }));
+    } catch { /* one unreadable file: skip it */ }
   }
   return out;
 }
@@ -54,6 +60,11 @@ export function onShared(callback) {
 }
 
 if (isNative) {
+  // Back follows Tally's sheet/screen history; at its root it returns to the launcher.
+  plugin('App')?.addListener?.('backButton', () => {
+    if ((globalThis.history?.state?.depth || 0) > 0) history.back();
+    else plugin('App').minimizeApp();
+  });
   // The phone's share sheet, for the pages that already ask the browser for it. A closed sheet is an AbortError, as in a browser.
   navigator.canShare = d => !!d && !!(d.files?.length || d.text || d.url);
   navigator.share = async d => {
