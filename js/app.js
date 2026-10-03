@@ -12,6 +12,10 @@ import { startScan } from './camera.js';
 import { applyLook, applySavedLook } from './colorpicker.js';
 import { on } from './features.js';
 import { sharedFiles, onShared } from './native.js';
+window.addEventListener('tally:scan-shortcut', () => {
+  if (!document.getElementById('view')?.children.length || locked() || document.querySelector('.lock, .scrim:not(.out)')) return;
+  ACT.scan();
+});
 
 applySavedLook();   // theme and accent before anything is drawn (the database copy is applied on every render)
 

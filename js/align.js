@@ -133,7 +133,7 @@ export async function readAligned(detect, raw, onStage = () => {}) {
     onStage('straighten');
     const texts = (await detect(rotateBy(best.raw, -angle))).texts;
     tries++;
-    if (readScore(texts) >= best.score * 0.95) return { texts, turns: best.turns, angle, tries };
+    if (readScore(texts) >= best.score * 0.95) return { raw: rotateBy(best.raw, -angle), texts, turns: best.turns, angle, tries };
   }
-  return { texts: best.texts, turns: best.turns, angle: 0, tries };
+  return { raw: best.raw, texts: best.texts, turns: best.turns, angle: 0, tries };
 }

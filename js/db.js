@@ -310,10 +310,19 @@ export async function delMany(store, keys) {
  * writes {store: [objects]}.
  * One IndexedDB transaction, so a crash or full disk mid-way leaves the old data untouched.
  */
-export async function writeAtomic({ clear = [], del = {}, put = {} }) {
+export async function writeAtomic({ clear = [], del = {}, put = {}, expected = {} }) {
   alive();
-  const stores = [...new Set([...clear, ...Object.keys(del), ...Object.keys(put)])];
+  const stores = [...new Set([...clear, ...Object.keys(del), ...Object.keys(put), ...Object.keys(expected)])];
+  const stable = value => JSON.stringify(value, (_, v) => v instanceof ArrayBuffer ? Array.from(new Uint8Array(v)) : ArrayBuffer.isView(v) ? Array.from(new Uint8Array(v.buffer, v.byteOffset, v.byteLength)) : v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.keys(v).sort().map(k => [k, v[k]])) : v);
+  const stale = () => Object.assign(new Error('The entry changed on your phone. Refresh and try again.'), { code: 'STALE' });
+  const guards = [];
+  for (const [store, list] of Object.entries(expected)) for (const { id, value } of list) {
+    const raw = idb ? await tx(store, 'readonly', os => reqP(os.get(id))) : mem[store][id];
+    if (stable(await unseal(raw)) !== stable(value)) throw stale();
+    guards.push({ store, id, raw });
+  }
   if (!idb) {
+    if (guards.some(g => stable(mem[g.store][g.id]) !== stable(g.raw))) throw stale();
     const backup = structuredClone(mem);
     try {
       for (const s of clear) mem[s] = {};
@@ -329,20 +338,32 @@ export async function writeAtomic({ clear = [], del = {}, put = {} }) {
   if (anySealed && own && !wrapsMine(own)) throw new Error('Tally is locked');
   const check = anySealed && !own;
   await new Promise((resolve, reject) => {
-    let t;
+    let t, changed = false;
     const write = () => {
       for (const s of clear) t.objectStore(s).clear();
       for (const [s, keys] of Object.entries(del)) for (const k of keys) t.objectStore(s).delete(k);
       for (const [s, list] of Object.entries(sealedPut)) { const os = t.objectStore(s); for (const o of list) os.put(o); }
     };
+    const checkedWrite = () => {
+      if (!guards.length) return write();
+      let left = guards.length;
+      for (const g of guards) {
+        const request = t.objectStore(g.store).get(g.id);
+        request.onsuccess = () => {
+          if (changed) return;
+          if (stable(request.result) !== stable(g.raw)) { changed = true; t.abort(); return; }
+          if (--left === 0) write();
+        };
+      }
+    };
     try {
       alive();   // the seal above can outlast an erase on this page
       t = idb.transaction(check ? [...new Set([...stores, 'kv'])] : stores, 'readwrite');
-      if (!check) write();
-      else { const g = t.objectStore('kv').get('settings'); g.onsuccess = () => { if (!wrapsMine(g.result)) { setKey(null); return t.abort(); } write(); }; }
+      if (!check) checkedWrite();
+      else { const g = t.objectStore('kv').get('settings'); g.onsuccess = () => { if (!wrapsMine(g.result)) { setKey(null); return t.abort(); } checkedWrite(); }; }
     } catch (e) { try { t?.abort(); } catch {} failHandler(e); return reject(e); } // abort: a half-written restore must not commit
     t.oncomplete = resolve;
-    t.onerror = t.onabort = () => { const e = t.error || new Error('Tally is locked'); failHandler(e); reject(e); };
+    t.onerror = t.onabort = () => { const e = changed ? stale() : t.error || new Error('Tally is locked'); if (!changed) failHandler(e); reject(e); };
   });
   notify('all');
 }

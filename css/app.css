@@ -972,3 +972,25 @@ body.calc-on :is(input, select) { scroll-margin-bottom: 72px; }   /* the calcula
 .chips.subs { margin-top: calc(-1 * var(--sp-1)); }
 .chip.small { min-height: 36px; font-size: var(--fs-sm); }
 .hint .hintpic { width: 100%; height: auto; }
+
+/* Explicit, foreground-only computer connection. */
+.desk-code{font-size:1.5rem;overflow-wrap:anywhere;font-variant-numeric:tabular-nums;margin:12px 0}.desk-steps{padding-left:24px;line-height:1.6}.desk-steps li{margin-bottom:16px}.desk-status{position:fixed;bottom:calc(80px + env(safe-area-inset-bottom));right:16px;z-index:25;background:var(--accent,#116b53);color:var(--accent-ink,#fff);border:0;border-radius:12px;padding:12px 16px;min-height:44px;box-shadow:0 2px 10px #0003}
+
+/* Welcome: optional website invitation, using the app's theme and text scale. */
+.welcome .meet-card{display:block;color:var(--ink);text-decoration:none;border:1px solid var(--line);border-radius:16px;overflow:hidden;margin:10px 0 4px;background:var(--panel)}
+.welcome .meet-card:hover{border-color:var(--accent)}
+.welcome .meet-card:focus-visible{outline:3px solid var(--accent);outline-offset:4px}
+.welcome .website-preview{position:relative;background:#070a16;height:164px;overflow:hidden;border-bottom:1px solid var(--line)}
+.welcome .website-preview img{display:block;width:100%;height:100%;object-fit:cover;object-position:center top}
+.welcome .website-address{display:flex;align-items:center;gap:6px;position:absolute;bottom:10px;left:12px;background:#0c1427;color:#c3d1e8;border:1px solid #273959;border-radius:6px;padding:5px 9px;font-size:.75rem}
+.welcome .website-address svg{width:12px;height:12px}
+.welcome .meet-copy{padding:18px}
+.welcome .meet-copy h2{font-family:var(--display);font-size:1.5rem;font-weight:650;margin:0 0 7px}
+.welcome .meet-copy p{color:var(--mute);font-size:var(--fs-sm);line-height:1.6;margin:0 0 15px}
+.welcome .explore{display:flex;align-items:center;gap:7px;font-size:var(--fs-sm);font-weight:600;color:var(--accent)}
+.welcome .explore svg{width:16px;height:16px;flex:none}
+.welcome .meet-copy small{display:block;font-size:var(--fs-xs);color:var(--mute);margin-top:6px}
+
+/* Large translated header titles may wrap on narrow phones; keep actions reachable. */
+.top > h1{min-width:0;overflow-wrap:anywhere}
+.top > .btn{flex-shrink:0}

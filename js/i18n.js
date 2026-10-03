@@ -27,8 +27,12 @@ const notPhone = typeof document !== 'undefined' && !/Mobi|iPhone|iPod/i.test(na
 const bigScreen = () => notPhone;
 /** t('Spent {0} of {1}.', a, b): the current language's text with values filled in. Unknown text stays English. */
 export function t(s, ...vals) {
+  const text = literalT(s, ...vals);
+  return bigScreen() ? text.replace(...DEVICE[lang]) : text;
+}
+/** Cross-device instructions name the phone even when read on a computer. */
+export function literalT(s, ...vals) {
   let tpl = (dict && Object.prototype.hasOwnProperty.call(dict, s) ? dict[s] : s);
-  if (bigScreen()) tpl = tpl.replace(...DEVICE[lang]);
   return vals.length ? tpl.replace(/\{(\d+)\}/g, (m, i) => (vals[+i] ?? m)) : tpl;
 }
 export async function setLang(want) {

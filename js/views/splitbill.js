@@ -2,7 +2,8 @@
 // charge and rounding are spread over the items first (as in Insights), so the shares add up to what was paid, to the sen.
 // The result goes out as a picture or as text (WhatsApp), and "Save my share" records it: the bill becomes my share, the
 // friends' shares money owed (engine OWING_KINDS). The names are remembered for next time.
-import { S, settings, setSetting, cat, putAll, uid, today as todayIso } from '../state.js';
+import { S, settings, setSetting, cat, putAll, uid, today as todayIso, bookGeneration } from '../state.js';
+import { get as getRecord } from '../db.js';
 import { t, fmtDate } from '../i18n.js';
 import { esc, openSheet, closeSheet, toast } from '../ui.js';
 import { fmtRM, allocate, isFx, calcAmount, validIso } from '../engine.js';
@@ -86,9 +87,28 @@ export function splitRows({ tx, people, who, paidBy = ME, paid, shop = tx.mercha
   return { accounts: [...made, ...moved], tx: [bill, ...shares, ...down], del: { tx: old.map(x => x.id) } };
 }
 /** splitRows, written all or nothing. */
-export const saveSplit = o => putAll({ ...splitRows(o), edit: true });
+export async function saveSplit(o, guard = null) {
+  if (!guard) return putAll({ ...splitRows(o), edit: true });
+  const stale = () => Object.assign(Error('The entry changed on your phone. Refresh and try again.'), { code: 'STALE' });
+  const shape = value => JSON.stringify(value, (_, v) => v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.keys(v).sort().map(k => [k, v[k]])) : v);
+  const accounts = structuredClone(o.accounts || S.accounts), txs = structuredClone(o.txs || S.tx), base = guard.expected;
+  const shares = guard.shares || [];
+  const live = txs.find(x => x.id === base?.id), liveShares = txs.filter(x => x.splitOf === base?.id).sort((a, b) => a.id.localeCompare(b.id));
+  if (!base || shape(live) !== shape(base) || shape(liveShares) !== shape([...shares].sort((a, b) => a.id.localeCompare(b.id))) || guard.generation !== bookGeneration()) throw stale();
+  const settingsRecord = await getRecord('kv', 'settings');
+  if (shape(settingsRecord?.value || {}) !== shape(settings())) throw stale();
+  const rows = splitRows({ ...o, tx: base, accounts, txs });
+  const touched = new Set([base.accountId, base.toAccountId, ...rows.tx.flatMap(x => [x.accountId, x.toAccountId]), ...rows.accounts.map(a => a.id), ...shares.flatMap(x => [x.accountId, x.toAccountId])].filter(Boolean));
+  return putAll({ ...rows, edit: true, expected: {
+    tx: [{ id: base.id, value: base }, ...shares.map(row => ({ id: row.id, value: row }))],
+    accounts: [...touched].map(id => ({ id, value: accounts.find(a => a.id === id) })),
+    kv: [{ id: 'settings', value: settingsRecord ?? undefined }, { id: 'bookGeneration', value: guard.generation == null ? undefined : { key: 'bookGeneration', value: guard.generation } }],
+  } });
+}
 
 export function openSplit(tx) {
+  tx = structuredClone(tx);
+  const guard = { expected: structuredClone(tx), shares: structuredClone(S.tx.filter(x => x.splitOf === tx.id)), generation: bookGeneration() };
   const o = original(tx), items = linesOf(o), sp = tx.split;
   // Split before: the same people, who had what and who paid, to change and save again.
   const people = sp ? [ME, ...sp.with] : [ME, ...(settings().friends || []).slice(0, 3)];
@@ -173,7 +193,11 @@ export function openSplit(tx) {
       const paid = payers.length > 1 ? Object.fromEntries(payers.map(p => [p, paidAmt[p] || 0])) : null;
       if (paid && Object.values(paid).reduce((s, v) => s + v, 0) !== o.amount) return toast(t('What everyone paid must add up to {0}.', fmtRM(o.amount)), { k: 'bad' });
       xb.disabled = true;
-      try { await saveSplit({ tx: S.tx.find(y => y.id === tx.id) || tx, people, who, paidBy: payers[0], ...(paid ? { paid } : {}) }); } catch (err) { console.error(err); xb.disabled = false; return toast(t('Could not save. Your phone may be out of space.'), { k: 'bad' }); }
+      try { await saveSplit({ tx, people, who, paidBy: payers[0], ...(paid ? { paid } : {}) }, guard); }
+      catch (err) {
+        console.error(err); xb.disabled = false;
+        return toast(err?.code === 'STALE' ? t('The entry changed on your phone. Refresh and try again.') + ' ' + t('Close this form and reopen the entry before saving.') : t('Could not save. Your phone may be out of space.'), { k: err?.code === 'STALE' ? 'warn' : 'bad' });
+      }
       closeSheet(); (await import('../app.js')).render();
       const top = myNet > 0 ? people.filter(p => p !== ME).reduce((a, b) => (owe[b] - paidOf(b) < owe[a] - paidOf(a) ? b : a)) : null;
       toast(myNet > 0 ? t('Saved. You owe {0}: {1}', top, fmtRM(myNet)) : t('Saved. Your share: {0}. Owed to you: {1}', fmtRM(owe[ME]), fmtRM(-myNet)), { icon: 'check' });
@@ -224,4 +248,24 @@ export function repayRows({ kind, name, amount, total, boxId, accountId, date, t
   }
   const typed = accounts.filter(a => a.typed), shift = typedShift(typed, txs, tx, today);
   return { tx, accounts: typed.filter(a => shift[a.id]).map(a => ({ ...a, opening: (a.opening || 0) + shift[a.id], updatedAt: now })), edit: true };
+}
+
+/** The debt and payments the repayment sheet showed when it opened. */
+export const repaymentBase = (kind, name, txs = S.tx) => structuredClone(txs.filter(x => kind === 'owedme'
+  ? x.owedBy === name || x.repaidBy === name : x.owedTo === name || x.repaidTo === name));
+/** Commit the repayment and any historical typed-balance adjustment against the same account snapshots. */
+export async function saveRepayment(o, guard = null) {
+  if (!guard) { const rows = repayRows(o); await putAll(rows); return rows; }
+  const stale = () => Object.assign(Error('The entry changed on your phone. Refresh and try again.'), { code: 'STALE' });
+  const shape = value => JSON.stringify(value, (_, v) => v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.keys(v).sort().map(k => [k, v[k]])) : v);
+  const accounts = structuredClone(o.accounts || S.accounts), txs = structuredClone(o.txs || S.tx);
+  const order = rows => [...rows].sort((a, b) => a.id.localeCompare(b.id));
+  if (guard.generation !== bookGeneration() || shape(order(repaymentBase(o.kind, o.name, txs))) !== shape(order(guard.tx))) throw stale();
+  const rows = repayRows({ ...o, accounts, txs }), touched = new Set([o.boxId, o.accountId, ...rows.accounts.map(a => a.id)]);
+  await putAll({ ...rows, expected: {
+    tx: guard.tx.map(row => ({ id: row.id, value: row })),
+    accounts: [...touched].map(id => ({ id, value: accounts.find(a => a.id === id) })),
+    kv: [{ id: 'bookGeneration', value: guard.generation == null ? undefined : { key: 'bookGeneration', value: guard.generation } }],
+  } });
+  return rows;
 }

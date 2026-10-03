@@ -28,12 +28,18 @@ test('page policy: no eval, no inline or third-party scripts, network limited to
 });
 
 test('no inline scripts in any page', () => {
-  for (const f of ['index.html', 'privacy.html', 'terms.html', '404.html']) assert.ok(!/<script(?![^>]*\bsrc=)[^>]*>/i.test(read(f)), f);
+  for (const f of ['index.html', 'connect.html', 'privacy.html', 'terms.html', '404.html']) assert.ok(!/<script(?![^>]*\bsrc=)[^>]*>/i.test(read(f)), f);
 });
 
-test('network calls: only the feedback form, a pasted Google Sheets link and a tapped exchange-rate lookup', () => {
+test('network calls: explicit feedback/import/rate actions and local computer pairing only', () => {
   const calls = jsFiles('js').flatMap(f => [...read(f).matchAll(/\bfetch\(([^,)]+)/g)].map(m => `${f.replace(/\\/g, '/')}:${m[1].trim()}`));
-  assert.deepEqual(calls.sort(), ['js/feedback.js:FORM', 'js/native.js:url.href', 'js/scan.js:url', "js/views/setup.js:'./build.txt'", 'js/views/setup.js:rateUrl', 'js/views/setup.js:url']);   // build.txt: this site's own file
+  assert.deepEqual(calls.sort(), ['js/desk-client.js:address + path', 'js/feedback.js:FORM', 'js/native.js:url.href', 'js/scan.js:url', "js/views/setup.js:'./build.txt'", 'js/views/setup.js:rateUrl', 'js/views/setup.js:url']);   // build.txt: this site's own file
+  const desk = read('js/desk-client.js');
+  assert.match(desk, /phoneAddress\(input\)/);
+  assert.match(desk, /JSON\.stringify\(\{ sdp \}\)/); // Only SDP goes through HTTP; book messages use DTLS.
+  assert.match(desk, /credentials: 'omit'/);
+  assert.ok(!/\b(localStorage|sessionStorage|indexedDB)\s*[.(]/.test(desk));
+  for (const file of ['js/desk-client.js', 'js/desk-host.js']) assert.match(read(file), /iceServers: \[\]/); // No STUN/TURN/cloud relay.
   assert.ok(read('js/views/setup.js').includes("const RATE_API = 'https://api.frankfurter.dev/v1/latest';"));   // one rate, no data about the person
   assert.ok(read('js/views/setup.js').includes("'rate-get': async () => {"));   // only from the button
   // the reader's own files, from this site only

@@ -176,6 +176,7 @@ const refundedIds = txs => new Set(txs.map(x => x.refundOf).filter(Boolean));
 const lastIncomeCat = () => S.tx.reduce((b, x) => (x.type === 'income' && x.category !== 'refund' && (!b || (x.createdAt || 0) > (b.createdAt || 0)) ? x : b), null)?.category || 'salary';
 // ---- add / edit sheet ------------------------------------------------------------------------------------------------
 let draft = null; // the transaction being edited; its id is fixed when the sheet opens, so saving twice can't duplicate
+let draftBase = null; // immutable row opened for an edit, even if a computer later changes or deletes it
 function sheetHtml() {
   const d = draft, isNew = !S.tx.some(x => x.id === d.id);
   const to = d.toAccountId || S.accounts.find(a => a.id !== d.accountId && !owing(a))?.id, twoCur = d.type === 'transfer' && (accOf(d.accountId)?.currency || 'MYR') !== (accOf(to)?.currency || 'MYR');
@@ -295,6 +296,7 @@ let unsaved = null;
 export function openTxSheet(preset = {}) {
   const resume = !Object.keys(preset).length && unsaved && Date.now() - unsaved.at < 15 * 60e3 ? unsaved : null;
   unsaved = null;
+  draftBase = null;
   draft = resume ? resume.draft : { id: uid('t'), type: 'expense', amount: 0, accountId: defaultAccount('quick', { amount: preset.amount || 0 }), category: usualCategory(), date: today(), time: nowTime(), merchant: '', source: 'quick', ...preset };
   catPicked = resume ? resume.cat : !!preset.category; accPicked = resume ? resume.acc : !!preset.accountId;
   catInView(openSheet(sheetHtml(), { label: t('Add'), onClose: () => {
@@ -403,7 +405,7 @@ export const act = {
   'tx-new': () => openTxSheet(),
   'sheet-close': () => closeSheet(),
   'cat-show': b => showCategory(b.dataset.c, b.dataset.m || undefined),
-  'tx-open': b => { const x = S.tx.find(y => y.id === b.dataset.id); if (!x) return; draft = structuredClone(x); catPicked = accPicked = true; catInView(openSheet(sheetHtml(), { label: t('Transaction') })); },
+  'tx-open': b => { const x = S.tx.find(y => y.id === b.dataset.id); if (!x) return; draftBase = structuredClone(x); draft = structuredClone(x); catPicked = accPicked = true; catInView(openSheet(sheetHtml(), { label: t('Transaction') })); },
   'tx-splitf': async () => { const x = S.tx.find(y => y.id === draft.id); if (!x) return; closeSheet(); (await import('./splitbill.js')).openSplit(x); },
   'tx-type': b => {
     readForm(); draft.type = b.dataset.type;
@@ -447,9 +449,9 @@ export const act = {
   // Several things in one payment (a phone and fish at the mall): list them and each is sorted into its category.
   'tx-split': async () => {
     const typed = $('#tx-amt')?.value || '';   // "鱼 25, 菜 8" typed as the amount: those become the items
-    readForm(); closeSheet(); const { editExisting } = await import('./review.js'); editExisting({ ...draft, items: [] }, { manual: true, lines: hasWords(typed) ? typed : '' });
+    readForm(); closeSheet(); const { editExisting } = await import('./review.js'); editExisting({ ...draft, items: [] }, { manual: true, lines: hasWords(typed) ? typed : '', base: draftBase });
   },
-  'tx-items': async () => { readForm(); closeSheet(); const { editExisting } = await import('./review.js'); editExisting(draft); },
+  'tx-items': async () => { readForm(); closeSheet(); const { editExisting } = await import('./review.js'); editExisting(draft, { base: draftBase }); },
   'tx-photo': async () => {
     const blob = await getPhoto(draft.receiptId);
     if (!blob) return toast(t('The photo is not on this phone (it may have been restored from a backup without photos).'));
@@ -464,18 +466,25 @@ export const act = {
     if (draft.date > today() && !draft.bill) return err(t("That date hasn't come yet. Pick today or an earlier day."));
     if (draft.type === 'transfer' && (!draft.toAccountId || draft.toAccountId === draft.accountId)) return err(t('Pick two different accounts.'));
     if ($('#tx-toamt') && !(draft.toAmount > 0)) { $('#tx-toamt').focus(); return err(t('Enter the amount that arrived.')); }
-    const isNew = !S.tx.some(x => x.id === draft.id);
+    const isNew = !draftBase && !S.tx.some(x => x.id === draft.id);
     if (isNew && draft.type === 'expense') {
       const dup = findDuplicate(draft, S.tx);
       if (dup && !(await confirmSheet({ title: t('Already added?'), body: t('{0} for {1} on {2} is already here.', dup.merchant || catLabel(dup.category), fmtRM(dup.amount), fmtDate(dup.date)), ok: t('Add anyway') }))) return;
     }
     b.disabled = true;
     const x = { ...draft, createdAt: draft.createdAt || Date.now() }, was = S.tx.find(y => y.id === x.id);
-    await saveTx(x);
+    try { await saveTx(x, draftBase ? { expected: draftBase } : undefined); }
+    catch (error) {
+      if (error?.code !== 'STALE') throw error;
+      b.disabled = false;
+      return err(t('The entry changed on your phone. Refresh and try again.') + ' ' + t('Close this form and reopen the entry before saving.'));
+    }
     { const L = on('subcats') && learnSub(S.kv.subRules, x); if (L) await setKv('subRules', L); }   // this shop's subcategory, next time
-    if (was) await keepToday(was, -1);   // an edit: the old version's move out, the new one's in
-    await keepToday(x);   // an old receipt doesn't change the balance typed today
-    await rateFrom(x);
+    if (!draftBase) {
+      if (was) await keepToday(was, -1);
+      await keepToday(x);   // guarded edits already committed both opening movements with their row
+      await rateFrom(x);
+    }
     if (x.merchant && x.type === 'expense' && !x.items?.length) await learn(x.merchant, x.category);
     closeSheet(); landed(x.id); render();
     const first = isNew && firstWord('entry');

@@ -1,6 +1,6 @@
 // Home (balance, month, one banner, recent) and Insights (charts, habits, the insight feed).
-import { S, today, nowLocal, nowTime, settings, setKv, setSetting, cat, booked, scopedAccounts, budgetsFor, inScope, startDay, thisMonth, cached, OLD_HOME, NEW_HOME, wipeSite, saveTx, keepToday, uid, defaultAccount, putAll } from '../state.js';
-import { repayRows } from './splitbill.js';
+import { S, today, nowLocal, nowTime, settings, setKv, setSetting, cat, booked, scopedAccounts, budgetsFor, inScope, startDay, thisMonth, cached, OLD_HOME, NEW_HOME, wipeSite, saveTx, keepToday, uid, defaultAccount, putAll, bookGeneration } from '../state.js';
+import { saveRepayment, repaymentBase } from './splitbill.js';
 import { t, fmtDate, fmtMonth, monShort, cycleShort, getLang } from '../i18n.js';
 import { esc, ICON, MASK, balHidden, eyeBtn, lineChart, pairBars, donut, openSheet, toast, countUp, replay, landing, $, confirmSheet, closeSheet, landed } from '../ui.js';
 import { firstSpend, fmtRM, balances, monthOf, monthSpend, monthSpends, monthIncomes, addMonths, pace, cashFlow, balanceTrend, insights, habits, dueNudge, daysBetween, itemKey, cycleKey, cycleSpan, billStatus, newest, fmtAcct, offTotal, isFx, rateOf, belowSince, CATEGORIES, affordCheck, topCats, calcAmount, recurringCandidates, owing, openShares, validIso, affordMoney } from '../engine.js';
@@ -18,6 +18,7 @@ import { analyticsCards, forecastCard, tilesHtml, affordInputs, subHint, act as 
 import { goalsCard, act as goalsAct } from './goals.js';
 import { shareSheet, monthName } from '../share.js';
 import { stickerCanvas, encode, fileName, canSave, wordOf } from '../sticker-export.js';
+import { isNative } from '../native.js';
 
 /** Fill an insight template: [English, ...values] where a value may be {cat}, {raw}, {date} or {list}. */
 export function fill([tpl, ...vals]) {
@@ -87,30 +88,59 @@ const stkSvg = (s, on = true, cls = 'stk') => `<svg class="${cls}${on ? '' : ' o
 /** The way to an earned sticker's Save sheet: an icon button (today's card) or the sticker itself (the book). */
 const stkSaveBtn = (ym, day, cls, inner, name) => `<button class="${cls}" data-act="sticker-sheet" data-ym="${ym}" data-day="${day}" aria-label="${esc(name ? `${name} · ${t('Save sticker')}` : t('Save sticker'))}">${inner}</button>`;
 let stkUrl = null;   // the open sticker sheet's picture, for the how-to's frames
-/** One sticker as a WhatsApp-ready file (sticker-export.js): the picture as it will be saved, on the chat colour of the
- *  app's theme, [Save sticker], and "?" for how WhatsApp's own Create sticker adds it (a web app can't add stickers).
- *  Only for earned stickers checked for saving (book data share: true). The how-to opens by itself after the first save. */
+/** Share an earned sticker's artwork through the native app chooser, or save its file.
+ *  Sharing an image does not install a WhatsApp sticker pack. The Save how-to explains WhatsApp's Create step. */
 async function stickerSheet(b) {
   const ym = b.dataset.ym, day = +b.dataset.day, book = bookOf(ym) || await loadBook(ym), filled = filledIn(ym);
   const s = book.stickers[panelOf(day, bookState({ ym, filled, today: today() }).n)];
   if (!filled.has(day) || !canSave(s)) return;
-  let url = null;
+  let url = null, file = null, busy = false, closed = false;
+  const canShare = isNative && typeof navigator.share === 'function';
   const el = openSheet(`<div class="sheethead"><h2 class="sh-title">${esc(say(s.name))}</h2><button class="icon-btn" data-act="sheet-close" aria-label="${esc(t('Close'))}">${ICON.x}</button></div>
     <div class="stk-swatch">${stkSvg(s, true, 'stk-prev')}</div>
-    <div class="stk-row"><button class="btn wide busy" data-x="save" disabled>${ICON.download}${esc(t('Save sticker'))}</button><button class="icon-btn stk-help" data-act="sticker-howto" aria-label="${esc(t('How to add it to WhatsApp'))}">?</button></div>`,
-  { label: say(s.name), stack: !!b.closest('.sheet'), onClose: () => { if (url) URL.revokeObjectURL(url); if (stkUrl === url) stkUrl = null; } });
+    ${canShare ? `<button class="btn wide busy" data-x="share" disabled>${ICON.share}${esc(t('Share'))}</button>` : ''}
+    <div class="stk-row"><button class="btn wide ${canShare ? 'ghost ' : ''}busy" data-x="save" disabled>${ICON.download}${esc(t('Save sticker'))}</button><button class="icon-btn stk-help" data-act="sticker-howto" aria-label="${esc(t('How to add it to WhatsApp'))}">?</button></div>`,
+  { label: say(s.name), stack: !!b.closest('.sheet'), onClose: () => { closed = true; if (url) URL.revokeObjectURL(url); if (stkUrl === url) stkUrl = null; } });
   if (!el) return;
-  const go = el.querySelector('[data-x="save"]');
-  try {
-    const blob = await encode((await stickerCanvas(s, wordOf(book.id, s.id))).c), file = new File([blob], fileName(blob.type), { type: blob.type });
+  const actions = [...el.querySelectorAll('[data-x="save"], [data-x="share"]')];
+  const setBusy = value => { busy = value; for (const button of actions) { button.disabled = value; button.classList.toggle('busy', value); } };
+  const makeFile = async () => {
+    if (file) return;
+    const blob = await encode((await stickerCanvas(s, wordOf(book.id, s.id))).c);
+    if (closed) return;
+    file = new File([blob], fileName(blob.type), { type: blob.type });
     stkUrl = url = URL.createObjectURL(blob);
     el.querySelector('.stk-swatch').innerHTML = `<img class="stk-prev" src="${url}" alt="${esc(say(s.name))}">`;
-    go.disabled = false; go.classList.remove('busy');
-    go.addEventListener('click', async () => {
-      download(file.name, file, file.type); toast(t('Sticker saved.'), { k: 'good', icon: 'check' });
-      if (!settings().stickerHowto) { await setSetting('stickerHowto', true); howTo(url); }
-    });
-  } catch (e) { console.error(e); toast(t('The sticker could not be made. Try again.')); }
+  };
+  for (const button of actions) button.addEventListener('click', async () => {
+    if (busy || closed) return;
+    setBusy(true);
+    let stage = 'make';
+    try {
+      await makeFile(); if (closed) return;
+      stage = button.dataset.x;
+      if (stage === 'share') {
+        await navigator.share({ files: [file] });
+      } else {
+        const result = await download(file.name, file, file.type);
+        if (result?.cancelled) return;
+        toast(t('Sticker saved.'), { k: 'good', icon: 'check' });
+        if (!closed && !settings().stickerHowto) {
+          try { await setSetting('stickerHowto', true); if (!closed) howTo(url); }
+          catch (e) { console.error(e); }   // the file was saved even if the help preference could not be recorded
+        }
+      }
+    } catch (e) {
+      if (e?.name !== 'AbortError') {
+        console.error(e);
+        toast(t(stage === 'make' ? 'The sticker could not be made. Try again.' : stage === 'share' ? 'The sticker could not be shared. Try again, or save it instead.' : 'Could not save. Your phone may be out of space.'));
+      }
+    } finally { setBusy(false); }
+  });
+  setBusy(true);
+  try { await makeFile(); }
+  catch (e) { console.error(e); toast(t('The sticker could not be made. Try again.')); }
+  finally { setBusy(false); }
 }
 /** How the saved file becomes a WhatsApp sticker, in three drawn frames (a generic phone, never WhatsApp's own look):
  *  saved → open the sticker tray and tap Create → pick it. Moving frames loop; still with reduced motion. */
@@ -303,6 +333,7 @@ function oweCards(hide) {
 function repaySheet(kind, name) {
   const back = kind === 'owedme', f = openShares(S.tx)[back ? 'owedMe' : 'iOwe'].find(x => x.name === name), box = S.accounts.find(a => a.kind === kind);
   if (!f || !box) return;
+  const guard = { tx: repaymentBase(kind, name), generation: bookGeneration() };
   const accts = S.accounts.filter(a => !owing(a)), pick = back && accts.some(a => a.id === f.from) ? f.from : defaultAccount('quick'), tdy = today();
   const el = openSheet(`<h2 class="sh-title">${esc(back ? t('{0} paid you back', name) : t('Pay {0} back', name))}</h2>
     <label class="field amount"><span>${esc(t('Amount (RM)'))}</span><input id="rp-amt" inputmode="decimal" autocomplete="off" aria-describedby="rp-err" value="${(f.sen / 100).toFixed(2)}"></label>
@@ -321,11 +352,10 @@ function repaySheet(kind, name) {
     b.disabled = true;
     let rows;
     try {
-      rows = repayRows({ kind, name, amount, total: f.sen, boxId: box.id, accountId: acc, date, treat: halal, today: tdy });
-      await putAll(rows);
+      rows = await saveRepayment({ kind, name, amount, total: f.sen, boxId: box.id, accountId: acc, date, treat: halal, today: tdy }, guard);
     } catch (error) {
       console.error(error); b.disabled = false;
-      return err(t('Could not save. Your phone may be out of space.'));
+      return err(error?.code === 'STALE' ? t('The entry changed on your phone. Refresh and try again.') + ' ' + t('Close this form and reopen the entry before saving.') : t('Could not save. Your phone may be out of space.'));
     }
     const x = rows.tx[0];
     closeSheet(); if (x) landed(x.id); render(); toast(t('Saved'), { icon: 'check' });

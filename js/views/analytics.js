@@ -2,7 +2,7 @@
 // with its headline figure. Sums come from engine.js; every chart has its numbers in text next to it or in a hidden table.
 import { S, booked, today, startDay, thisMonth, scope, hasJoint, budgetsFor, inScope, settings, cat, cached, scopedAccounts } from '../state.js';
 import { t, fmtDate, fmtMonth, cycleShort, getLang, langTag } from '../i18n.js';
-import { esc, short, ICON, openSheet, closeSheet, lineChart, balHidden, MASK } from '../ui.js';
+import { esc, short, ICON, openSheet, closeSheet, lineChart, balHidden, MASK, toast } from '../ui.js';
 import { fmtRM, addDays, addMonths, cycleSpan, monthIncomes, monthSpends, forecast, perMonth, billStatus, recurringCandidates, fixedFlexible, dailySpend, whenGrid, topShops, paymentMix, savingsRate, foodSplit, taxPaid, jointIn, taxRelief, priceHistory, basketIndex,
   categoryItems, subSplit, shopPrices, next30, paydayEffect, firstSpend, billChanges, openShares, cpiChange, yearReview, affordMoney, owing, monthOf, monthSpend, cycleKey, daysBetween } from '../engine.js';
 import { CPI } from '../cpi.js';
@@ -149,10 +149,39 @@ function owedCard() {
   if (!o.owedMe.length && !o.iOwe.length) return '';
   const age = f => (f.since ? daysBetween(f.since, tdy) : 0), oldest = l => [...l].sort((a, b) => age(b) - age(a));
   const row = (f, mine) => `<li class="rowb"><span class="grow"><b>${esc(f.name)}</b><small>${esc(age(f) ? t('for {0} days', age(f)) : t('since today'))}</small></span><span class="num">${esc(fmtRM(f.sen))}</span>${mine
-    ? `<a class="btn small ghost" href="https://wa.me/?text=${encodeURIComponent(t('Hi {0}, a small reminder: {1} for the bill we split. Thanks!', f.name, fmtRM(f.sen)))}" target="_blank" rel="noopener noreferrer">${ICON.chat}${esc(t('Remind'))}</a>` : ''}</li>`;
+    ? `<button class="btn small ghost" data-act="friend-remind" data-name="${esc(f.name)}">${ICON.chat}${esc(t('Remind'))}</button>` : ''}</li>`;
   return card('owed', t('Between friends'), [o.owedMe.length && t('Owed to you {0}', fmtRM(sum(o.owedMe))), o.iOwe.length && t('You owe {0}', fmtRM(sum(o.iOwe)))].filter(Boolean).join(' · '),
     `${o.owedMe.length ? `<h3>${esc(t('Owed to you'))}</h3><ul class="list">${oldest(o.owedMe).map(f => row(f, true)).join('')}</ul>` : ''}${o.iOwe.length ? `<h3>${esc(t('You owe'))}</h3><ul class="list">${oldest(o.iOwe).map(f => row(f, false)).join('')}</ul>` : ''}
-    <p class="fine">${esc(t('"Remind" opens WhatsApp with a message for you to send; Tally sends nothing itself.'))}</p>`);
+    <p class="fine">${esc(t('Edit the message, then choose an app to share it. Tally sends nothing itself.'))}</p>`);
+}
+
+/** A personal draft only: sharing happens after the user edits and chooses Share. */
+export function openReminder(friend) {
+  const message = t('Hi {0}, a small reminder: {1} for the bill we split. Thanks!', friend.name, fmtRM(friend.sen));
+  const canShare = typeof navigator.share === 'function';
+  const sheet = openSheet(`<h2 class="sh-title">${esc(t('Remind'))}</h2><p class="fine">${esc(t('Edit the message, then choose an app to share it. Tally sends nothing itself.'))}</p>
+    <label class="field"><span>${esc(t('Reminder message'))}</span><textarea id="reminder-draft" rows="6">${esc(message)}</textarea></label>
+    <p class="err" id="reminder-error" role="alert"></p><div class="row2 sheetfoot"><button class="btn ghost" id="reminder-cancel">${esc(t('Cancel'))}</button><button class="btn" id="reminder-share"${canShare ? '' : ' hidden'}>${ICON.share}${esc(t('Share'))}</button><button class="btn${canShare ? ' ghost' : ''}" id="reminder-copy"${canShare ? ' hidden' : ''}>${esc(t('Copy message'))}</button></div>`, { label: t('Remind') });
+  const draft = sheet.querySelector('#reminder-draft'), share = sheet.querySelector('#reminder-share'), copy = sheet.querySelector('#reminder-copy'), error = sheet.querySelector('#reminder-error');
+  let busy = false;
+  const update = () => { share.disabled = copy.disabled = busy || !draft.value.trim(); };
+  draft.addEventListener('input', update); update();
+  sheet.querySelector('#reminder-cancel').onclick = () => closeSheet();
+  share.onclick = async () => {
+    if (busy || !draft.value.trim()) return;
+    busy = true; update(); error.textContent = '';
+    try { await navigator.share({ text: draft.value }); }
+    catch (e) {
+      if (e?.name !== 'AbortError') { error.textContent = t('Could not share. Try copying the message instead.'); copy.hidden = false; }
+    } finally { busy = false; update(); }
+  };
+  copy.onclick = async () => {
+    if (busy || !draft.value.trim()) return;
+    busy = true; update(); error.textContent = '';
+    try { await navigator.clipboard.writeText(draft.value); toast(t('Copied. Paste it in your chat.')); }
+    catch { error.textContent = t('Could not copy. Select the message and copy it.'); }
+    finally { busy = false; update(); }
+  };
 }
 
 // ---- the next 30 days ------------------------------------------------------------------------------------------------------------
@@ -270,6 +299,7 @@ const catInfo = c => ({ label: catLabel(c), color: cat(c).color });
 const mine = () => !(scope() === 'joint' || (scope() === 'all' && hasJoint()));
 
 export const act = {
+  'friend-remind': b => { const friend = openShares(booked()).owedMe.find(f => f.name === b.dataset.name); if (friend) openReminder(friend); },
   acard: b => { const d = b.parentElement, id = b.dataset.id; d.open = !d.open; if (d.open) OPEN.add(id); else OPEN.delete(id); },
   // A category on the donut: what was bought in it (receipt items; payments without one by shop), then its entries.
   'cat-items': b => {

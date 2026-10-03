@@ -63,7 +63,7 @@ export function rowsOf(boxes) {
     if (row && Math.abs(w.v - row.v) < Math.min(w.h, row.h) / 2) row.words.push(w);
     else rows.push({ v: w.v, h: w.h, words: [w] });
   }
-  return rows.map(r => { const ws = r.words.sort((a, c) => a.x - c.x); return { text: ws.map(w => w.text).join(' '), conf: Math.min(...ws.map(w => w.mean ?? 1)), y: ws.reduce((s, w) => s + w.y, 0) / ws.length, h: Math.max(...ws.map(w => w.h)) }; });
+  return rows.map(r => { const ws = r.words.sort((a, c) => a.x - c.x); return { text: ws.map(w => w.text).join(' '), words: ws.map(w => ({ text: w.text, conf: w.mean ?? 1, x: w.x })), conf: Math.min(...ws.map(w => w.mean ?? 1)), y: ws.reduce((s, w) => s + w.y, 0) / ws.length, h: Math.max(...ws.map(w => w.h)) }; });
 }
 export const joinRows = boxes => rowsOf(boxes).map(r => r.text).join('\n');
 
@@ -217,6 +217,7 @@ export function parseReceipt(text) {
   const lines = text.split(/\r?\n/).map(l => l.slice(0, 300).replace(/\s+/g, ' ').trim())   // receipt lines are short: a runaway one can't stall the patterns
     .map(l => l.replace(/\bbarcode\s*:?\s*(?:[0-9][0-9A-Z]{10,13}\b)?/gi, ' ').replace(/\s+/g, ' ').trim())   // "Barcode: 9555C39200019" (OCR's C for 0): never a name
     .map(l => l.replace(/\bRM ?O(?=[.,]\d{2}\b)/gi, 'RM0'))   // "RMO.01": OCR's O for the 0 of a sen amount
+    .map(l => ROUNDING.test(l) ? l.replace(/(^|[\s-])O(?=[.,]\d{2}\b)/g, '$10') : l)   // a labelled "ROUNDING -O.02"; never change an item's letters
     // "1,299.00" is one amount: without this the amount patterns read "299.00" and leave "1," in the name, and a total
     // misread the same way still adds up (CORD bench). Commas only: "3 499.00" may be 3 × 499.
     .map(l => l.replace(/(?<![\d.,])(\d{1,3})((?:,\d{3})+)(?=[.,]\d{2}(?!\d))/g, (m, a, b) => a + b.replace(/,/g, '')))

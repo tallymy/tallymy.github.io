@@ -1,6 +1,6 @@
 // Scan → review → save. Photos are read one at a time in a queue, so capture never waits on the screen.
 // Only uncertain lines are flagged; the checksum says whether the items add up to the printed total.
-import { S, cat, setKv, saveTx, keepToday, savePhoto, deletePhotos, getPhoto, learn, expenseCats, today, nowTime, uid, defaultAccount } from '../state.js';
+import { S, cat, setKv, saveTx, savePhoto, deletePhotos, getPhoto, learn, expenseCats, today, nowTime, uid, defaultAccount, bookGeneration } from '../state.js';
 import { t, fmtDate, fmtMonth, getLang } from '../i18n.js';
 import { esc, ICON, toast, confirmSheet, openSheet, closeSheet, $, $$, landed, countUp, reduced, announce } from '../ui.js';
 import { firstWord } from './learn.js';
@@ -12,6 +12,7 @@ let saved = false; ocrSaved().then(v => { saved = v; }, () => {});   // already 
 import { render, go, scanned } from '../app.js';
 import { accName } from './money.js';
 import { startScan } from '../camera.js';
+import { validCorners } from '../receipt-image.js';
 
 // The first download's progress, drawn in place so the bar moves without redrawing the screen.
 let dlPct = 0, dlText = '', dlSaid = 0;
@@ -44,51 +45,72 @@ function onStage(stage) {
 const queue = [];     // files waiting to be read
 let current = null;   // {id, file?, status: 'reading'|'ready'|'error', draft, photo, ms, error}
 let reading = false;
+let reviewEpoch = 0;
+let revealCleanup = null;
+const active = (epoch, generation) => epoch === reviewEpoch && generation === bookGeneration();
+export function resetReview() {
+  reviewEpoch++;
+  clearTimeout(persistT); clearInterval(ticker);
+  revealCleanup?.(); revealCleanup = null;
+  if (current?.thumb) URL.revokeObjectURL(current.thumb);
+  current = null; queue.length = 0; reading = false;
+}
+document.addEventListener('tally:book-replaced', resetReview);
 
 // The photo being read stays listed until its draft is saved: closing the app mid-read must not lose it.
 const saveQueue = () => setKv('scanQueue', [...(['reading', 'error'].includes(current?.status) ? [current.id] : []), ...queue.map(q => q.id)]);
 export async function enqueue(files) {
+  const epoch = reviewEpoch, generation = bookGeneration();
   try {
     let unsaved = 0;
-    for (const f of files) { const id = uid('r'); queue.push({ id, file: f, status: 'waiting' }); if (!(await savePhoto(`q_${id}`, f))) unsaved++; }
+    for (const f of files) { if (!active(epoch, generation)) return; const id = uid('r'); queue.push({ id, file: f, status: 'waiting' }); if (!(await savePhoto(`q_${id}`, f, { generation }))) unsaved++; }
+    if (!active(epoch, generation)) return;
     if (unsaved) toast(t('Phone storage is full: close Tally now and these photos are lost. Free some space.'), { k: 'bad' });
     await saveQueue();
-  } finally { pump(); }   // read them now whatever happened to the saved copies
+  } finally { if (active(epoch, generation)) pump(); }   // read them now whatever happened to the saved copies
 }
 // While one receipt is checked, the next photo is already being read, so a pile of receipts goes one after another.
 function readAhead() {
+  const epoch = reviewEpoch, generation = bookGeneration();
   const n = queue[0];
   if (!n || n.ahead || !ocrReady()) return;
   n.t0 = performance.now();
-  n.ahead = readReceipt(n.file, s => { n.stage = s; if (current?.id === n.id) onStage(s); });
+  n.ahead = readReceipt(n.file, s => { if (!active(epoch, generation)) return; n.stage = s; if (current?.id === n.id) onStage(s); });
   n.ahead.catch(() => {});   // pump reports it when this photo's turn comes
 }
 async function pump() {
+  const epoch = reviewEpoch, generation = bookGeneration();
   if (current?.status === 'ready') readAhead();
   if (reading || current?.status === 'ready' || current?.status === 'reading') return;
   const next = queue.shift();
   if (!next) { current = null; return; }
   const { ahead, t0, stage, ...rest } = next;   // the read-ahead's own fields; adopted below
   current = { ...rest, status: 'reading', thumb: URL.createObjectURL(next.file) };
-  saveQueue();
+  saveQueue().catch(() => {});
   reading = true; refresh(); announce(t('Reading…'));
   try {
     if (!ocrReady()) await loadOcr();
+    if (!active(epoch, generation)) return;
     if (stage) { Object.assign(current, { t0, est, stage }); refresh(); clearInterval(ticker); ticker = setInterval(paintRead, 250); }   // read ahead, still going
-    const { receipt, photo, ms, turns, tries } = await (ahead || readReceipt(next.file, onStage));
+    const { receipt, photo, ms, turns, tries } = await (ahead || readReceipt(next.file, s => { if (active(epoch, generation)) onStage(s); }));
+    if (!active(epoch, generation)) return;
     est = ms / tries;
     const draft = toDraft(receipt);
-    if (photo) { draft.receiptId = uid('p'); if (!(await savePhoto(draft.receiptId, photo))) delete draft.receiptId; }   // saved now so a draft survives a restart
+    if (photo) { draft.receiptId = uid('p'); if (!(await savePhoto(draft.receiptId, photo, { generation }))) delete draft.receiptId; }   // saved now so a draft survives a restart
+    if (!active(epoch, generation)) return;
     current = { ...current, status: 'ready', ms, turns, draft, reveal: true, ...(photo ? { thumb: URL.createObjectURL(photo) } : {}) };   // the upright photo, as it was read
     if (!document.querySelector('.view-review')) toast(t('Your receipt is read.'), { k: 'good', icon: 'check', undo: () => go('review'), undoLabel: t('Check it') });   // left while the reader downloaded
     const n = draft.items.length;
     announce([n === 1 ? t('1 item') : t('{0} items', n), draft.total != null && t('Total {0}', fmtRM(draft.total))].filter(Boolean).join(', '));
     await setKv('reviewDraft', { draft, existing: false });
+    if (!active(epoch, generation)) return;
     await saveQueue();
   } catch (e) {
+    if (!active(epoch, generation)) return;
     console.error(e);
     current = { ...current, status: 'error', error: /not an image/.test(e.message) ? t('That file is not a photo. Pick a JPG or PNG of the receipt.') : /too big/.test(e.message) ? t('That photo is over 40 MB. Take a new one or send a smaller copy.') : /too many pixels/.test(e.message) ? t('That photo is over 50 megapixels. Take it in the normal camera mode, or send a smaller copy.') : /could not be downloaded|fetch|network|load failed/i.test(e.message) ? t("The receipt reader isn't on this phone yet. It downloads once (about 30 MB, from Tally's own site); after that, scanning works offline. Connect and try again.") : t('Could not read this photo: {0}', e.message) };
   }
+  if (!active(epoch, generation)) return;
   if (current?.status === 'error') await saveQueue();
   else deletePhotos([`q_${next.id}`]);   // read: the draft holds its own copy now; an unreadable one waits for Skip
   reading = false; refresh();
@@ -101,26 +123,30 @@ const refresh = () => { if (location.hash.startsWith('#/review')) render(); };
 // The receipt being checked is kept on the phone as it's edited, so a locked phone or a killed tab loses nothing.
 let persistT;
 function persist() {
+  const epoch = reviewEpoch, generation = bookGeneration();
   clearTimeout(persistT);
   persistT = setTimeout(() => {
-    if (current?.status !== 'ready') return;
-    if (current.manual && !current.draft.items.length) return setKv('reviewDraft', null);   // nothing typed yet: nothing to resume
-    setKv('reviewDraft', { draft: current.draft, existing: !!current.existing, manual: !!current.manual });
+    if (!active(epoch, generation) || current?.status !== 'ready') return;
+    if (current.manual && !current.draft.items.length) return setKv('reviewDraft', null).catch(() => {});   // nothing typed yet: nothing to resume
+    setKv('reviewDraft', { draft: current.draft, existing: !!current.existing, manual: !!current.manual, base: current.base }).catch(() => {});
   }, 300);
 }
 function finish() { clearTimeout(persistT); if (current) current.unread = ''; if (current?.thumb) URL.revokeObjectURL(current.thumb); current = null; return setKv('reviewDraft', null); }
 /** On start: reopen an unfinished review. Returns 'items' for typed items (no photo), 'receipt' for the rest, or false. */
 export async function restoreDraft() {
+  const epoch = reviewEpoch, generation = bookGeneration();
   if (current) return false;
-  for (const id of S.kv.scanQueue || []) { const file = await getPhoto(`q_${id}`); if (file) queue.push({ id, file, status: 'waiting' }); }
+  for (const id of S.kv.scanQueue || []) { const file = await getPhoto(`q_${id}`); if (!active(epoch, generation)) return false; if (file) queue.push({ id, file, status: 'waiting' }); }
   const saved = S.kv.reviewDraft;
   if (saved?.draft) {
     const blob = saved.draft.receiptId ? await getPhoto(saved.draft.receiptId) : null;
-    current = { id: uid('r'), status: 'ready', existing: saved.existing, manual: saved.manual, draft: saved.draft, thumb: blob ? URL.createObjectURL(blob) : null };
+    if (!active(epoch, generation)) return false;
+    current = { id: uid('r'), status: 'ready', existing: saved.existing, base: saved.base, manual: saved.manual, draft: saved.draft, thumb: blob ? URL.createObjectURL(blob) : null };
   } else if (queue.length) {
     // Photos left waiting while the reader was still downloading: read them now only if the reader is here. Otherwise don't
     // start a 30 MB download on every open (prepaid data); Scan offers to read them when the person chooses.
-    if (ocrReady() || await ocrSaved()) pump(); else return 'waiting';
+    const ready = ocrReady() || await ocrSaved(); if (!active(epoch, generation)) return false;
+    if (ready) pump(); else return 'waiting';
   }
   return current?.draft && !current.draft.receiptId ? 'items' : !!current || queue.length > 0 ? 'receipt' : false;
 }
@@ -139,7 +165,7 @@ function toDraft(r) {
   // Each item as read, then as this user renamed that same reading before ("WS B121 WET WIPES" → "WS BT21 WET WIPES").
   const items = r.items.map(i => {
     const raw = (i.name || '').slice(0, 80), fixed = raw && S.kv.itemNames?.[itemKey(raw)], name = fixed || raw;
-    return { name, raw, cents: i.cents, category: meal(categorize(name, merchant, rules)), flag: !fixed && !!i.flag, ...(i.crop ? { crop: i.crop } : {}) };
+    return { name, raw, cents: i.cents, category: meal(categorize(name, merchant, rules)), flag: !!i.priceFlag || (!fixed && !!i.flag), nameFlag: !fixed && !!i.nameFlag, priceFlag: !!i.priceFlag, ...(i.qty ? { qty: i.qty, unit: i.unit } : {}), ...(i.crop ? { crop: i.crop } : {}) };
   });
   items.forEach((i, n) => { if (i.cents < 0 && n > 0) i.category = items[n - 1].category; });   // money off belongs to the item it sits under
   const shop = shopCategory(merchant, rules), category = r.meal && ['other', 'groceries'].includes(shop) ? 'dining' : shop;
@@ -147,13 +173,14 @@ function toDraft(r) {
     id: uid('t'), type: 'expense', source: 'receipt', merchant, readName: read, returnDays: r.returnDays, warrantyMonths: r.warrantyMonths, date: r.date && r.date <= today() ? r.date : today(), dateFound: !!r.date, time: r.time || nowTime(),
     accountId: defaultAccount('receipt', { amount: r.total || 0, shop: merchant, category, pay: r.pay, currency: r.currency }), currency: r.currency, category, items,
     sub: on('subcats') ? subFor(category, merchant, items, S.kv.subRules) : '',   // guessed from the shop and the items, or learned
-    total: r.total, totalGuessed: !!r.totalGuessed, tax: r.tax ?? 0, service: r.service ?? 0, rounding: r.rounding ?? 0, taxIncluded: !!r.taxIncluded,
+    total: r.total, totalGuessed: !!r.totalGuessed, notReceipt: !!r.notReceipt, tax: r.tax ?? 0, service: r.service ?? 0, rounding: r.rounding ?? 0, taxIncluded: !!r.taxIncluded,
     ...(r.refund ? { refund: true } : {}),
   };
 }
 /** Open an already-saved receipt transaction for item editing (from the transaction sheet). */
-export function editExisting(tx, { manual = false, lines = '' } = {}) {
-  current = { id: uid('r'), status: 'ready', existing: true, manual, draft: { ...structuredClone(tx), dateFound: true, total: tx.amount, items: (tx.items || []).map(i => ({ ...i })) } };
+export function editExisting(tx, { manual = false, lines = '', base } = {}) {
+  base = base === undefined ? S.tx.find(x => x.id === tx.id) : base;
+  current = { id: uid('r'), status: 'ready', existing: !!base, base: base ? structuredClone(base) : null, manual, draft: { ...structuredClone(tx), dateFound: true, total: tx.amount, items: (tx.items || []).map(i => ({ ...i })) } };
   if (lines) addLines(lines);   // "鱼 25, 菜 8" typed where the amount goes
   persist();
   go('review');
@@ -171,6 +198,7 @@ export const reviewView = {
   /** A receipt just read: once its items are on screen they come in one by one, categories sliding into place, while
    *  the total ticks up; then "adds up" pops. A tap or a key skips to the end; none of it with reduced motion. */
   after() {
+    showStrips();
     if (!current?.reveal) return;
     current.reveal = false;
     const main = $('#view'), box = $('#rv-status'), d = current.draft;
@@ -188,6 +216,7 @@ export const reviewView = {
       box.innerHTML = final;
       if (d.total != null && check(d).ok) box.firstElementChild?.classList.add('pop');
     };
+    revealCleanup = end;
     // On a phone the items are below the photo: the reveal waits until they are scrolled into view.
     const io = new IntersectionObserver(([e]) => {
       if (!e.isIntersecting || done) return;
@@ -227,6 +256,7 @@ export const reviewView = {
       <select class="icat" data-input="rv-f" data-k="gapCat" aria-label="${esc(`${t('Not itemised')}: ${t('Category')}`)}">${catOpts(gapCat(d))}</select></div>` : '';
     const maths = [[t('Items'), itemsSum(d)], [t('Service'), d.service], [t('Tax'), d.taxIncluded ? 0 : d.tax], [t('Rounding'), d.rounding]].filter(([, v]) => v).map(([k, v]) => `${k} ${fmtRM(v, { plain: true })}`).join(' + ');
     return `<header class="top"><h1>${esc(current.manual || (current.existing && !d.receiptId) ? t('Your items') : t('Review receipt'))}</h1>${waiting ? `<span class="fine">${esc(t('{0} more waiting', waiting))}</span>` : ''}</header>
+      ${d.notReceipt ? `<div class="warnbox">${ICON.alert}<span>${esc(t('This does not look like a receipt. Nothing has been saved.'))}<button class="btn ghost" data-act="tx-new">${esc(t('No receipt? Add by hand'))}</button></span></div>` : ''}
       ${old ? `<div class="warnbox">${ICON.clock}<span class="grow">${esc(t('This receipt is dated {0}. It will be filed under {1}, not this month.', fmtDate(d.date, { year: true }), fmtMonth(d.date.slice(0, 7))))}
         <button class="btn small ghost" data-act="rv-today">${esc(t("Use today's date"))}</button></span></div>` : ''}
       ${dup ? `<p class="warnbox">${ICON.alert}${esc(t('Looks like you already added this: {0} on {1}.', fmtRM(dup.amount), fmtDate(dup.date)))}</p>` : ''}
@@ -240,7 +270,7 @@ export const reviewView = {
           return d.currency && d.currency !== cur ? `<p class="warnbox">${ICON.alert}<span>${esc(t('This receipt is in {0}, but {1} is in {2}. Pick an account in {0}, or check the amount.', d.currency, a?.name || '', cur === 'MYR' ? 'RM' : cur))}</span></p>` : ''; })()}
         <label class="field big"><span>${esc(isFx(S.accounts.find(x => x.id === d.accountId)) ? t('Total ({0})', S.accounts.find(x => x.id === d.accountId).currency) : t('Total (RM)'))}${d.totalGuessed ? ` <em class="warn">${esc(t('(guessed, check)'))}</em>` : ''}</span><input id="rv-total" inputmode="decimal" aria-describedby="rv-status" value="${d.total != null ? (d.total / 100).toFixed(2) : ''}" data-input="rv-f" data-k="total"></label>
       </section>
-      ${current.thumb ? `<figure class="receipt-thumb"><button class="thumb-btn" data-act="rv-zoom" aria-expanded="false" aria-label="${esc(t('Show the whole receipt'))}"><img src="${current.thumb}" alt="${esc(t('Receipt photo'))}"></button></figure>` : ''}
+      ${current.thumb ? `<figure class="receipt-thumb"><button class="thumb-btn" data-act="rv-zoom" aria-expanded="false" aria-label="${esc(t('Show the whole receipt'))}"><img src="${current.thumb}" alt="${esc(t('Receipt photo'))}"></button></figure>${!current.manual && !current.existing ? `<button class="btn ghost wide" data-act="rv-flatten">${esc(t('Fix the receipt corners'))}</button>` : ''}` : ''}
       <div id="rv-status">${status}${d.total != null && c && !c.ok && maths ? `<p class="maths">${esc(maths)} ≠ ${esc(fmtRM(d.total, { plain: true }))}</p>` : ''}</div>
       <div class="rowb"><h2>${esc(t('Items'))} <span class="fine">${esc(flagged ? t('{0} to check', flagged) : '')}</span></h2>${d.items.length > 2 ? `<button class="btn small ghost" data-act="rv-select" aria-pressed="${!!current.selecting}">${esc(current.selecting ? t('Done') : t('Select'))}</button>` : ''}</div>
       ${current.selecting ? `<div class="bulkbar"><span class="fine grow">${esc(t('{0} selected', current.picked?.size || 0))}</span><select id="rv-bulkcat" aria-label="${esc(t('Category'))}">${catOpts('')}</select><button class="btn small" data-act="rv-bulkcat">${esc(t('Set'))}</button></div>` : ''}
@@ -249,6 +279,7 @@ export const reviewView = {
         <input class="iamt" inputmode="decimal" value="${(i.cents / 100).toFixed(2)}" aria-label="${esc(t('Price'))}" data-input="rv-item" data-n="${n}" data-k="cents">
         <select class="icat" aria-label="${esc(t('Category'))}" data-input="rv-item" data-n="${n}" data-k="category">${catOpts(i.category)}</select>
         <button class="icon-btn" data-act="rv-del" data-n="${n}" aria-label="${esc(t('Remove {0}', i.name || t('item')))}">${ICON.x}</button>
+        ${i.flag && i.crop && current.thumb ? `<button class="rawbtn" style="grid-column:1/-1;width:100%" data-act="rv-crop" data-n="${n}" aria-label="${esc(t('Show this line on the receipt'))}"><canvas data-receipt-strip="${n}" style="width:100%;height:auto" role="img" aria-label="${esc(t('Receipt photo'))}"></canvas></button>` : ''}
         ${i.crop && current.thumb ? `<button class="raw rawbtn" data-act="rv-crop" data-n="${n}" aria-label="${esc(t('Show this line on the receipt'))}">${i.raw && i.raw !== i.name ? esc(i.raw) : ''} ${ICON.image}</button>` : i.raw && i.raw !== i.name ? `<small class="raw">${esc(i.raw)}</small>` : i.qty ? `<small class="raw">${esc(`${i.qty} × ${fmtRM(i.unit, { plain: true })}`)}</small>` : ''}</li>`).join('')}</ul>
       <div id="rv-gap">${gapLine}</div>
       <button class="btn ghost wide" data-act="rv-add">${ICON.plus}${esc(current.manual || (current.existing && !d.receiptId) ? t('Add an item') : t('Add a missing item'))}</button>
@@ -258,11 +289,76 @@ export const reviewView = {
       ${d.items.length ? '' : `<label class="field"><span>${esc(t('Category'))}</span><select id="rv-cat" data-input="rv-f" data-k="category">${catOpts(d.category)}</select></label>`}
       ${on('reminders') ? remindHtml(d) : ''}
       ${current.manual ? '' : `<label class="check"><input type="checkbox" id="rv-refund" data-input="rv-refund"${d.refund ? ' checked' : ''}> ${esc(t('Refund: money back to this account'))}</label>`}
-      <label class="check"><input type="checkbox" id="rv-learn" checked> ${esc(t('Remember my category changes for next time'))}</label>
+      <label class="check"><input type="checkbox" id="rv-learn" checked> ${esc(t('Remember my name and category changes for next time'))}</label>
       <div class="sticky rv-foot">${on('split') && !d.refund && !queue.length && !(current.existing && S.tx.find(x => x.id === d.id)?.split) ? `<button class="link rv-split" data-act="rv-save-split">${ICON.users}${esc(t('Save and split with friends'))}</button>` : ''}
         <div class="row2"><button class="btn ghost" data-act="rv-skip">${esc(current.existing ? t('Cancel') : t('Discard'))}</button><button class="btn" data-act="rv-save">${esc(flagged ? t('Save · {0} to check', flagged) : t('Save'))}</button></div></div>`;
   },
 };
+
+async function showStrips() {
+  const receipt = current, canvases = [...document.querySelectorAll('[data-receipt-strip]')];
+  if (!receipt?.thumb || !canvases.length) return;
+  const img = new Image(); img.src = receipt.thumb; await img.decode().catch(() => {});
+  if (current !== receipt || !img.naturalWidth) return;
+  for (const c of canvases) {
+    const item = receipt.draft.items[+c.dataset.receiptStrip]; if (!c.isConnected || !item?.crop) continue;
+    const top = Math.max(0, item.crop.t), bottom = Math.min(1, item.crop.b);
+    c.width = img.naturalWidth; c.height = Math.max(1, Math.round(img.naturalHeight * (bottom - top)));
+    c.getContext('2d').drawImage(img, 0, top * img.naturalHeight, img.naturalWidth, c.height, 0, 0, c.width, c.height);
+  }
+}
+
+async function fixCorners() {
+  const epoch = reviewEpoch, generation = bookGeneration();
+  const receipt = current; if (!receipt?.thumb || receipt.existing || reading) return;
+  if (!(await confirmSheet({ title: t('Fix the receipt corners'), body: t('Reading again replaces changes you made to this receipt.'), ok: t('Continue') }))) return;
+  if (!active(epoch, generation)) return;
+  const file = receipt.file || await getPhoto(receipt.draft.receiptId); if (!file) return;
+  if (!active(epoch, generation)) return;
+  const url = URL.createObjectURL(file), image = new Image(); image.src = url;
+  try { await image.decode(); } finally { URL.revokeObjectURL(url); }
+  if (!active(epoch, generation)) return;
+  const canvas = document.createElement('canvas'), scale = Math.min(1, 900 / Math.max(image.naturalWidth, image.naturalHeight));
+  canvas.width = Math.round(image.naturalWidth * scale); canvas.height = Math.round(image.naturalHeight * scale);
+  canvas.style.cssText = 'width:100%;height:auto;touch-action:manipulation'; canvas.tabIndex = 0;
+  canvas.setAttribute('role', 'img'); canvas.setAttribute('aria-label', t('Tap top left, top right, bottom right, then bottom left.'));
+  let points = [], cursor = [0, 0];
+  const sheet = openSheet(`<h2 class="sh-title">${esc(t('Fix the receipt corners'))}</h2><p>${esc(t('Tap top left, top right, bottom right, then bottom left.'))}</p><div class="corner-photo"></div><p class="fine" role="status" id="corner-count">0 / 4</p><p class="err" id="corner-error"></p><div class="row2"><button class="btn ghost" data-corner="reset">${esc(t('Reset'))}</button><button class="btn" data-corner="read" disabled>${esc(t('Read again'))}</button></div>`, { label: t('Fix the receipt corners'), stack: true });
+  sheet.querySelector('.corner-photo').append(canvas);
+  const paint = () => {
+    const g = canvas.getContext('2d'); g.drawImage(image, 0, 0, canvas.width, canvas.height); g.strokeStyle = '#ffcc00'; g.fillStyle = '#ffcc00'; g.lineWidth = 3;
+    if (points.length) { g.beginPath(); points.forEach(([x, y], n) => n ? g.lineTo(x * canvas.width, y * canvas.height) : g.moveTo(x * canvas.width, y * canvas.height)); if (points.length === 4) g.closePath(); g.stroke(); }
+    points.forEach(([x, y], n) => { g.beginPath(); g.arc(x * canvas.width, y * canvas.height, 6, 0, Math.PI * 2); g.fill(); g.fillText(String(n + 1), x * canvas.width + 8, y * canvas.height + 12); });
+    sheet.querySelector('#corner-count').textContent = `${points.length} / 4`; sheet.querySelector('[data-corner=read]').disabled = !validCorners(points);
+  };
+  const add = point => { if (points.length >= 4) return; points.push(point); paint(); if (points.length === 4 && !validCorners(points)) sheet.querySelector('#corner-error').textContent = t('Corners cross or are too close. Reset and try again.'); };
+  canvas.addEventListener('click', e => { const b = canvas.getBoundingClientRect(); add([Math.min(1, Math.max(0, (e.clientX - b.left) / b.width)), Math.min(1, Math.max(0, (e.clientY - b.top) / b.height))]); });
+  canvas.addEventListener('keydown', e => {
+    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Enter', ' '].includes(e.key)) return; e.preventDefault();
+    if (e.key === 'Enter' || e.key === ' ') { add([...cursor]); cursor = [[0, 0], [1, 0], [1, 1], [0, 1]][points.length] || [0, 0]; }
+    else { const n = /Left|Right/.test(e.key) ? 0 : 1; cursor[n] = Math.min(1, Math.max(0, cursor[n] + (/Right|Down/.test(e.key) ? 0.01 : -0.01))); }
+  });
+  sheet.addEventListener('click', async e => {
+    const action = e.target.closest('[data-corner]')?.dataset.corner;
+    if (action === 'reset') { points = []; cursor = [0, 0]; sheet.querySelector('#corner-error').textContent = ''; paint(); }
+    if (action !== 'read' || !validCorners(points) || current !== receipt) return;
+    const corners = points; closeSheet(); reading = true; current.status = 'reading'; refresh();
+    try {
+      const result = await readReceipt(file, s => { if (active(epoch, generation)) onStage(s); }, { corners });
+      if (!active(epoch, generation)) return;
+      const draft = toDraft(result.receipt); draft.accountId = receipt.draft.accountId;
+      const oldPhoto = receipt.draft.receiptId;
+      draft.receiptId = uid('p');
+      if (!(await savePhoto(draft.receiptId, result.photo, { generation }))) {
+        if (oldPhoto) draft.receiptId = oldPhoto; else delete draft.receiptId;
+      } else if (oldPhoto && active(epoch, generation)) await deletePhotos([oldPhoto]);
+      if (!active(epoch, generation)) return;
+      URL.revokeObjectURL(receipt.thumb); current = { ...receipt, status: 'ready', draft, thumb: URL.createObjectURL(result.photo) }; await setKv('reviewDraft', { draft, existing: false });
+    } catch (error) { if (active(epoch, generation)) { current.status = 'ready'; toast(t('Could not read this photo: {0}', error.message), { k: 'bad' }); } }
+    finally { if (active(epoch, generation)) { reading = false; refresh(); } }
+  });
+  paint();
+}
 
 export const input = {
   'rv-remind': el => { const d = current?.draft; if (d) { d[el.dataset.k] = el.checked; persist(); } },
@@ -288,10 +384,10 @@ export const input = {
   'rv-item': el => {
     const i = current?.draft?.items[+el.dataset.n]; if (!i) return;
     persist();
-    if (el.dataset.k === 'cents') { const v = calcAmount(el.value); el.classList.toggle('bad', v == null); el.setAttribute('aria-invalid', String(v == null)); if (v != null) { i.cents = v; if (i.qty) i.unit = Math.round(v / i.qty); } updateStatus(); }
-    else if (el.dataset.k === 'category') { i.category = el.value; i.changed = true; unflag(i, el); }
+    if (el.dataset.k === 'cents') { const v = calcAmount(el.value); el.classList.toggle('bad', v == null); el.setAttribute('aria-invalid', String(v == null)); if (v != null) { i.cents = v; i.priceFlag = false; if (i.qty) i.unit = Math.round(v / i.qty); if (!i.nameFlag) unflag(i, el); } updateStatus(); }
+    else if (el.dataset.k === 'category') { i.category = el.value; i.changed = true; }
     else {
-      i.name = el.value.slice(0, 80); unflag(i, el);
+      i.name = el.value.slice(0, 80); i.nameFlag = !i.name.trim(); if (!i.priceFlag && !i.nameFlag) unflag(i, el);
       // Sorted as it is typed ("Phone" → Electronics, "Ikan" → Groceries) until the user picks a category themselves.
       if (!i.changed) { i.category = guessFor(i.name, current.draft); const sel = el.closest('li')?.querySelector('.icat'); if (sel) sel.value = i.category; }
     }
@@ -376,6 +472,7 @@ function addLines(text) {
   return { n: lines.length, skipped };
 }
 export const act = {
+  'rv-flatten': fixCorners,
   'rv-readq': () => { pump(); render(); },
   'photo-tips': () => photoTips(),
   // Retake: this reading is let go (it can't be fixed by typing), and the camera opens for a new photo of the same receipt.
@@ -412,8 +509,14 @@ export const act = {
     const pad = (i.crop.b - i.crop.t) * 1.2, top = Math.max(0, i.crop.t - pad), h = Math.min(1, i.crop.b + pad) - top;
     const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = Math.max(1, Math.round(img.naturalHeight * h));
     c.getContext('2d').drawImage(img, 0, top * img.naturalHeight, img.naturalWidth, c.height, 0, 0, c.width, c.height);
-    const el = openSheet(`<h2 class="sh-title">${esc(i.name || i.raw)}</h2><p class="fine mono">${esc(i.raw || '')}</p><div class="cropview"></div><button class="btn wide" data-act="sheet-close">${esc(t('Got it'))}</button>`, { label: t('Show this line on the receipt'), stack: true });
+    const el = openSheet(`<h2 class="sh-title">${esc(i.name || i.raw)}</h2><p class="fine mono">${esc(i.raw || '')}</p><div class="cropview"></div><label class="field"><span>${esc(t('Item name'))}</span><input class="crop-name" maxlength="80" value="${esc(i.name)}"></label><label class="field"><span>${esc(t('Price'))}</span><input class="crop-price" inputmode="decimal" value="${(i.cents / 100).toFixed(2)}"></label><p class="err crop-error" role="alert"></p><button class="btn wide" data-fix-line>${esc(t('Save'))}</button>`, { label: t('Show this line on the receipt'), stack: true });
     c.setAttribute('role', 'img'); c.setAttribute('aria-label', t('Receipt photo')); el.querySelector('.cropview').append(c);
+    el.querySelector('[data-fix-line]').addEventListener('click', () => {
+      const value = calcAmount(el.querySelector('.crop-price').value), name = el.querySelector('.crop-name').value.trim();
+      if (value == null || !name) { el.querySelector('.crop-error').textContent = t('Check the name and price.'); return; }
+      i.name = name; i.cents = value; i.priceFlag = false; i.nameFlag = false; i.flag = false; if (!i.changed) i.category = guessFor(name, current.draft);
+      if (i.qty) i.unit = Math.round(value / i.qty); closeSheet(); persist(); refresh();
+    });
   },
   'rv-gapitem': () => { const d = current.draft; d.items.push({ name: '', raw: '', cents: gapOf(d), category: gapCat(d), flag: true }); persist(); render(); $$('.iname').at(-1)?.focus(); },   // the gap as an item: only its name to type
   // Many items at once (a 40-line grocery receipt): tick them, pick one category.
@@ -424,8 +527,11 @@ export const act = {
   // Save and split: the same save, then the split sheet on the saved receipt with its items ready to tap.
   'rv-save-split': b => act['rv-save'](b, 'split'),
   'rv-save': async (b, how) => {   // how: 'split' from Save and split (actions also get the click event)
+    const epoch = reviewEpoch, generation = bookGeneration();
     const split = how === 'split';
+    if (!current?.draft) return;
     const d = current.draft;
+    if (d.notReceipt) return toast(t('This does not look like a receipt. Nothing has been saved.'), { k: 'warn' });
     if (current.manual && d.items.length) d.total = itemsSum(d);
     if (!d.total || d.total <= 0) { toast(t('Type the total from the receipt first.'), { k: 'warn' }); $('#rv-total')?.focus(); return; }
     if (!validIso(d.date)) { toast(t('Pick a date.'), { k: 'warn' }); return; }
@@ -434,22 +540,30 @@ export const act = {
     const gap = !current.manual && d.items.length && !check(d).ok ? gapOf(d) : 0;   // more on the receipt than the items: its own line
     if (gap < 0 && !(await confirmSheet({ title: t('Items do not add up'), body: t('The difference is spread across the items by size, so your categories stay close. Save anyway?'), ok: t('Save anyway') }))) return;
     b.disabled = true;
+    if (!active(epoch, generation)) return;
     const learnIt = $('#rv-learn')?.checked;
     const items = d.items.filter(i => i.name || i.cents).map(({ name, raw, cents, category, qty, unit }) => ({ name: name || raw || t('Item'), raw, cents, category, ...(qty ? { qty, unit } : {}) }));
     if (gap > 0) items.push({ name: t('Not itemised'), raw: '', cents: gap, category: gapCat(d) });
     // Editing an entry keeps what the review doesn't show: who added it (a spouse's stays theirs), its bill, its source.
-    const was = current.existing ? S.tx.find(x => x.id === d.id) || {} : {};
+    const was = current.existing ? current.base || {} : {};
     const spentOn = items.length ? mostSpent(items) : d.category;   // a refund lowers spending there instead
     const tx = { ...was, id: d.id, date: d.date, time: d.time, type: d.refund ? 'income' : 'expense', amount: d.total, accountId: d.accountId, merchant: (d.merchant || '').trim(), note: d.note || '',
       category: d.refund ? 'refund' : spentOn, ...(d.refund ? { cat: spentOn, refundOf: d.refundOf || refundTarget(d) } : { cat: undefined }), ...(d.remindReturn && d.returnDays ? { returnBy: returnDate(d) } : {}), ...(d.remindWarranty && d.warrantyMonths ? { warranty: warrantyDate(d) } : {}), items, tax: d.tax || 0, service: d.service || 0, rounding: d.rounding || 0, source: was.source || 'receipt', createdAt: d.createdAt || Date.now(), ...(d.receiptId ? { receiptId: d.receiptId } : {}) };
     if (on('subcats') && !d.refund) { if (d.sub) tx.sub = d.sub; else delete tx.sub; }   // off: an edit keeps what it had
-    await saveTx(tx);
+    if (current.existing && !current.base) { b.disabled = false; return toast(t('The entry changed on your phone. Refresh and try again.') + ' ' + t('Close this form and reopen the entry before saving.'), { k: 'warn' }); }
+    try { await saveTx(tx, { expected: current.existing ? current.base : null }); }
+    catch (error) {
+      if (error?.code !== 'STALE') throw error;
+      b.disabled = false;
+      return toast(t('The entry changed on your phone. Refresh and try again.') + ' ' + t('Close this form and reopen the entry before saving.'), { k: 'warn' });
+    }
+    if (!active(epoch, generation)) return;
     { const L = on('subcats') && learnSub(S.kv.subRules, tx); if (L) await setKv('subRules', L); }   // this shop's subcategory, next time
-    if (!current.existing) await keepToday(tx);   // an old receipt doesn't change the balance typed today
+    // Guarded save committed any typed opening adjustment with the row.
     clearTimeout(persistT); await setKv('reviewDraft', null);   // saved: nothing to resume, even if the tab dies now
-    if (d.readName && tx.merchant && tx.merchant !== d.readName && itemKey(d.readName))   // remember the name they gave this shop
+    if (learnIt && d.readName && tx.merchant && tx.merchant !== d.readName && itemKey(d.readName))   // remember the name they gave this shop
       await setKv('shopNames', Object.fromEntries([...Object.entries(S.kv.shopNames || {}), [itemKey(d.readName), tx.merchant.slice(0, 80)]].slice(-500)));
-    const names = learnNames(S.kv.itemNames, d.items);   // and the names they gave items the reader got wrong
+    const names = learnIt && learnNames(S.kv.itemNames, d.items);   // and the names they gave items the reader got wrong
     if (names) await setKv('itemNames', names);
     if (learnIt) for (const i of d.items.filter(x => x.changed)) await learn(i.name || i.raw, i.category);
     landed(tx.id);

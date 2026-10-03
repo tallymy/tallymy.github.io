@@ -62,11 +62,9 @@ test('an entry moved off the joint account (a split bill a friend paid) goes fro
   assert.ok(again.tx.some(t => t.id === 'e1'));
 });
 
-test('restoring a backup while sample data is shown ends the sample first, so "Start for real" later never clears what was restored', () => {
-  const src = readFileSync(new URL('../js/views/setup.js', import.meta.url), 'utf8');
-  const restore = src.match(/async function restoreText[\s\S]*?\n}\n/)[0];
-  assert.match(restore, /settings\(\)\.sample[\s\S]*?await endSample\(\)[\s\S]*?const choice/, 'endSample runs before the merge/replace choice');
-});
+// Atomic sample removal and cancelled/failed restores are now exercised against
+// the restore action and database in restore-integrity.test.mjs. The former
+// source-pattern check required deleting sample data before user confirmation.
 
 test('with the sample ended first, a restore keeps its budgets and no-spend days', async () => {
   const { startSample, endSample } = await import('../js/sample.js');

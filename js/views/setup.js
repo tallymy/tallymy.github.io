@@ -109,6 +109,33 @@ const whyFree = () => `<section class="card whyfree"><h2>${esc(t('Why is Tally f
   <li>${ICON.sparkles}<span>${esc(t('A passion project by {0}, one developer in Malaysia.', MAKER))} ${mailLink()}</span></li>
   <li>${ICON.globe}<span><a class="link" href="https://github.com/tallymy/tallymy.github.io" target="_blank" rel="noopener">${esc(t('Open source: anyone can read the code.'))}</a></span></li>
   <li>${ICON.lock}<span>${esc(t('No servers to pay for, and none of your money data to sell.'))}</span></li></ul></section>`;
+// Optional migration guide: no completion flag and no data changes on skip.
+function migrationGuide(step = 1) {
+  const title = isNative ? (step === 1 ? 'Step 1: Back up the website' : 'Step 2: Restore here') : ['Step 1: Make a backup', 'Step 2: Find the file', 'Step 3: Restore in the app'][step - 1];
+  let body;
+  if (isNative && step === 1) body = `<p class="sh-body">${esc(t('Open the browser you used for Tally. In Settings, tap Back up now and save or send the file to yourself.'))}</p>
+    <a class="btn ghost wide" href="https://tallymy.github.io/?app" target="_blank" rel="noopener noreferrer">${ICON.external || ICON.globe}${esc(t('Open old Tally'))}</a>
+    <button class="btn wide" data-act="migration-restore-step">${esc(t('I have the backup file'))}</button>`;
+  else if (isNative) body = `<p class="sh-body">${esc(t('Choose your Tally backup file to restore your accounts and entries here.'))}</p>
+    <button class="btn wide" data-act="migration-restore">${esc(t('Restore a Tally backup'))}</button>`;
+  else if (step === 1) body = `<p class="sh-body">${esc(t('Tap Back up now, then save the file or send it to yourself. Keep this website data until you have checked it in the app.'))}</p>
+    <button class="btn wide" data-act="migration-backup">${ICON.download}${esc(t('Back up now'))}</button>
+    <button class="btn ghost wide" data-act="migration-check">${esc(t('I have the backup file'))}</button>`;
+  else if (step === 2) body = `<p class="sh-body">${esc(t('Look in Downloads, or where you sent the backup. Continue only when you can find the file yourself.'))}</p>
+    <button class="btn wide" data-act="migration-found">${esc(t("I've found the file"))}</button>`;
+  else body = `<p class="sh-body">${esc(t('When you have the Tally app, open it, tap Restore a Tally backup, and choose the file. Check your accounts and entries before removing the website data.'))}</p>`;
+  openSheet(`<div class="sheethead"><h2 class="sh-title">${esc(t(title))}</h2><button class="icon-btn" data-act="sheet-close" aria-label="${esc(t('Close'))}">${ICON.x}</button></div>
+    ${body}<p class="fine">${esc(t('You can open this guide later in Settings.'))}</p>
+    <button class="btn ghost wide" data-act="sheet-close">${esc(t('Later'))}</button>`, { label: t(title) });
+}
+
+function setupModeSummary(mode) {
+  const simple = mode === 'simple';
+  return `<p><b>${esc(t('{0} selected', t(simple ? 'Simple' : 'Standard')))}</b></p>
+    <p>${esc(t(simple ? 'Type expenses yourself. See your balance, entries and totals. Receipt scanning, budgets and other extras stay off.' : 'Scan receipts, set budgets and see spending charts. You can still type expenses yourself.'))}</p>
+    <p class="fine">${esc(t('Your choice takes effect when you press Start. Change it later in Settings → Features.'))}</p>`;
+}
+
 export const welcomeView = {
   title: 'Welcome',
   render() {
@@ -123,7 +150,16 @@ export const welcomeView = {
       <button class="btn ghost wide" data-act="sample-go">${esc(t('Not sure yet? Look around with sample data'))}</button>
       <button class="btn ghost wide" data-act="import-open">${esc(t('Bring my data: bank or e-wallet statements (MAE, TNG, Grab…), other money apps, Excel'))}</button>
       <button class="btn ghost wide" data-act="restore-pick">${esc(t('Restore a Tally backup'))}</button>
-      ${isNative ? `<p class="fine">${esc(t('Moving from the website? Back up there, then restore that file here.'))}</p>` : ''}
+      ${isNative ? `<section class="card" id="migration-welcome"><h2>${esc(t('Moving from the website?'))}</h2>
+      <p class="fine">${esc(t('Moving from the website? Back up there, then restore that file here.'))}</p>
+      <button class="btn ghost wide" data-act="migration-guide">${esc(t('Guide me'))}</button>
+      <button class="btn ghost wide" data-act="migration-dismiss">${esc(t("I'll do it myself"))}</button>
+      <button class="btn ghost wide" data-act="migration-dismiss">${esc(t('Later'))}</button>
+      </section>` : ''}
+      <a class="meet-card" href="https://tallymy.github.io/${siteUrl()}" target="_blank" rel="noopener noreferrer">
+        <div class="website-preview"><img src="img/website-preview.png" alt="" width="1100" height="640" loading="lazy"><span class="website-address">${ICON.globe} tallymy.github.io</span></div>
+        <div class="meet-copy"><h2>${esc(t('Meet Tally'))}</h2><p>${esc(t('See what Tally can do, with examples and a quick tour.'))}</p><span class="explore">${esc(t("Explore Tally's website"))} ${ICON.external || ICON.globe}</span><small>${esc(t('Opens in your browser'))}</small></div>
+      </a>
       ${whyFree()}
       <div class="langrow"><div class="sizerow"><span class="fine">${esc(t('Text size'))}</span>${sizeButtons()}</div></div>
       <p class="fine">${esc(t('By using Tally you agree to the Terms of use and have read the Privacy policy.'))}</p>
@@ -131,7 +167,7 @@ export const welcomeView = {
       <ul class="points">
         <li>${ICON.receipt}<span>${esc(t('Receipts are read on this phone and split into categories automatically.'))}</span></li>
         <li>${ICON.lock}<span>${esc(t('Tally never reads your SMS and never asks for your bank login. The camera is the only permission it asks for.'))}</span></li>
-        <li>${ICON.wallet}<span>${esc(t('No account, no ads. Your entries stay on this phone. They leave it only when you export, back up or share them, or add a reminder to Google Calendar.'))} <button class="link" data-act="storage-info">${esc(t('How your data is kept'))}</button> · <button class="link" data-act="net-check">${esc(t('Check it yourself'))}</button></span></li>
+        <li>${ICON.wallet}<span>${esc(t('No account, no ads. Your entries stay on this phone. They leave it only when you export, back up, share, connect your own computer, or add a reminder to Google Calendar.'))} <button class="link" data-act="storage-info">${esc(t('How your data is kept'))}</button> · <button class="link" data-act="net-check">${esc(t('Check it yourself'))}</button></span></li>
         <li>${ICON.upload}<span>${esc(t('Already tracking in another app or a spreadsheet? Bring your history with you.'))}</span></li>
         <li>${ICON.download}<span>${esc(t('Your data is never locked in: take it to Excel, Google Sheets or another money app any time.'))}</span></li>
       </ul>
@@ -203,6 +239,10 @@ function showFound(x) {
 export const settingsView = {
   title: 'Settings',
   async after() {   // the reader card says so when the reader is already on this phone
+    if (isNative) {
+      const control = $('#scan-shortcut');
+      try { const result = await Capacitor.Plugins.TallyNative.scanShortcut({}); if (control?.isConnected) control.value = result.button; } catch { if (control) control.disabled = true; }
+    }
     // Search: Down from the box to the matches, Up/Down between them, Enter takes the best, Escape clears.
     $('#set-q')?.addEventListener('keydown', e => {
       if (e.key === 'ArrowDown' && hits.length) { e.preventDefault(); $('#set-hits button')?.focus(); }
@@ -247,6 +287,7 @@ export const settingsView = {
       <section class="card" id="backup"><h2 id="s-backup">${esc(t('Backup'))}</h2>
         <p class="fine">${esc(last ? t('Last backup: {0}', last.slice(0, 10)) : t('Not backed up yet'))} · ${esc(t('Tally keeps everything on this phone. Save a backup file to Google Drive or email it to yourself.'))}</p>
         <div class="row2"><button class="btn" data-act="backup">${ICON.download}${esc(t('Back up now'))}</button><button class="btn ghost" data-act="restore-pick">${esc(t('Restore'))}</button></div>
+        <button class="btn ghost wide" data-act="migration-guide">${esc(t('Migration help'))}</button>
         <p class="warnbox">${ICON.alert}<span>${esc(isNative ? t('Uninstalling Tally, clearing its app data, or resetting this phone deletes your entries, accounts and receipt photos. Back up first.') : t('Uninstalling Tally or clearing its site data deletes your Tally entries, accounts and receipt photos from this phone. Back up first.'))} <button class="link" data-act="storage-info">${esc(t('How your data is kept'))}</button></span></p>
         ${storage.persisted == null ? '' : `<p class="fine">${esc(storage.persisted ? t('Storage: protected. The browser will not clear Tally to free up space.') : t('If the phone runs out of space, the browser may clear Tally. A backup file keeps you safe.'))}</p>`}</section>
       <section class="card" id="s-data"><h2>${esc(t('Import & export'))}</h2><p class="fine">${esc(t('From Money Manager, Money Lover, Spendee, Wallet, Monefy, YNAB, Cashew, Bluecoins, 1Money, Toshl or AndroMoney, Excel, CSV, a bank statement, or Google Sheets.'))}</p>
@@ -273,6 +314,8 @@ export const settingsView = {
         <button class="btn ghost danger wide" data-act="erase">${ICON.trash}${esc(t("Erase Tally's data"))}</button>
         <p class="legal">${legalLinks()}</p></section>
       ${learnCard()}
+      ${isNative ? `<section class="card"><h2>${esc(t('Use Tally on your computer'))}</h2><p class="fine">${esc(t('A bigger screen for your expenses. Nothing to install on the computer.'))}</p><button class="btn ghost wide" data-act="desk-connect">${esc(t('Start connection'))}</button></section>` : ''}
+      ${isNative ? `<section class="card"><h2>${esc(t('Receipt shortcut'))}</h2><p class="fine">${esc(t('Double-tap a volume button while Tally is open to open the receipt camera. It does nothing in other apps. Single presses still change the volume.'))}</p><label class="field"><span>${esc(t('Button'))}</span><select data-input="scan-shortcut" id="scan-shortcut"><option value="off">${esc(t('Off'))}</option><option value="up">${esc(t('Volume up'))}</option><option value="down">${esc(t('Volume down'))}</option></select></label><p class="fine">${esc(t('For receipts in another app, take a screenshot and share that image with Tally. No background screen access.'))}</p></section>` : ''}
       <section class="card" id="s-help"><h2>${esc(t('Help and feedback'))}</h2>
         <div class="row2"><button class="btn ghost" data-act="tour">${esc(t('Take the tour'))}</button><button class="btn ghost" data-act="whats-new">${esc(t("What's new"))}</button></div>
         ${canInstall() ? `<button class="btn ghost wide" data-act="install">${ICON.download}${esc(t('Install Tally on this phone'))}</button>` : ''}
@@ -287,6 +330,7 @@ export const settingsView = {
   },
 };
 export const input = {
+  'scan-shortcut': async el => { try { await Capacitor.Plugins.TallyNative.scanShortcut({ button: el.value }); } catch { el.value = 'off'; toast(t('Could not save. Your phone may be out of space.'), { k: 'bad' }); } },
   'set-q': el => { findQ = el.value; findSettings(); if (hits.length) announce(t('{0} found', hits.length)); },
 module: async el => { await setModules({ [el.dataset.k]: el.checked }); render(); $(`[data-input="module"][data-k="${el.dataset.k}"]`)?.focus(); },
   'text-size': el => setSize(+el.value),
@@ -650,48 +694,49 @@ async function restoreText(text, zip = {}) {
   let data;
   try { data = readBackup(text); } catch (e) { return impErr(t(e.message)); }
   if (data.joint) return importJoint(data, zip);
-  // Real data in: the sample goes first (as "Start for real"). Left on, its budgets won a merge, and its card's "Start
-  // for real" later zeroed the restored budgets and dropped the restored no-spend days and friends.
-  if (settings().sample) {
-    if (sampleRows().tx.some(x => !x.sample) && !(await confirmSheet({ title: t('Remove the sample data?'), body: t('Entries you added to the sample accounts go too.'), ok: t('Remove') }))) return;
-    await endSample();
-  }
-  const choice = S.tx.length || S.accounts.length ? await new Promise(res => {
-    openSheet(`<h2 class="sh-title">${esc(t('Restore backup'))}</h2><p class="sh-body">${esc(t('The backup has {0} transactions. This phone has {1}.', data.tx.length, S.tx.length))}</p>
+  // Plan sample removal without writing: cancel or a failed restore must leave the old book intact.
+  const sample = settings().sample ? sampleRows() : null;
+  if (sample?.tx.some(x => !x.sample) && !(await confirmSheet({ title: t('Remove the sample data?'), body: t('Entries you added to the sample accounts go too.'), ok: t('Remove') }))) return;
+  const removed = { accounts: [...(sample?.ids || [])], tx: (sample?.tx || []).map(x => x.id), recurring: (sample?.recurring || []).map(x => x.id) };
+  const keep = (list, store) => list.filter(x => !removed[store].includes(x.id));
+  const local = { accounts: keep(S.accounts, 'accounts'), tx: keep(S.tx, 'tx'), recurring: keep(S.recurring, 'recurring'), kv: {
+    budgets: sample ? { total: 0, byCat: {} } : S.kv.budgets, rules: S.kv.rules, customCats: S.kv.customCats,
+    shopNames: S.kv.shopNames || {}, itemNames: S.kv.itemNames || {}, goals: sample ? S.kv.goals.filter(g => !g.sample && !sample.ids.has(g.accountId)) : S.kv.goals,
+    subcats: S.kv.subcats || {}, subRules: S.kv.subRules || {}, catColors: S.kv.catColors || {}, catIcons: S.kv.catIcons || {}, dismissed: S.kv.dismissed,
+  } };
+  const choice = local.tx.length || local.accounts.length ? await new Promise(res => {
+    openSheet(`<h2 class="sh-title">${esc(t('Restore backup'))}</h2><p class="sh-body">${esc(t('The backup has {0} transactions. This phone has {1}.', data.tx.length, local.tx.length))}</p>
       <button class="btn wide" data-x="merge">${esc(t('Merge (keep both, recommended)'))}</button><button class="btn ghost danger wide" data-x="replace">${esc(t("Replace Tally's data on this phone"))}</button><button class="btn ghost wide" data-x="no">${esc(t('Cancel'))}</button>`, { label: t('Restore backup'), onClose: () => res('no') })
       .addEventListener('click', e => { const b = e.target.closest('[data-x]'); if (b) { res(b.dataset.x); closeSheet(); } });
   }) : 'replace';
   if (choice === 'no') return;
-  const local = { accounts: S.accounts, tx: S.tx, recurring: S.recurring, kv: { budgets: S.kv.budgets, rules: S.kv.rules, customCats: S.kv.customCats, shopNames: S.kv.shopNames || {}, itemNames: S.kv.itemNames || {}, goals: S.kv.goals } };
-  const before = choice === 'merge' ? S.tx : [], had = new Set(before.map(x => x.id));   // a merge keeps these rows as they are, photos too
-  if (choice === 'merge') {
-    const merged = mergeBackup({ ...local, kv: { ...local.kv, dismissed: S.kv.dismissed } }, data);
-    if (overCap({ ...merged, customCats: merged.kv.customCats })) return impErr(t("Adding this would make Tally's data more than a backup can restore, so nothing was added."));   // both together: no backup of them would restore
-    await addAll(merged);
-  } else await replaceAll(data);
-  // Its settings (month start, language, text size…): all of them on a replace, only what this phone hasn't set on a merge.
-  const cur = settings(), want = Object.entries(data.settings || {}).filter(([k]) => choice !== 'merge' || cur[k] == null);
-  if (want.length) {
-    await setKv('settings', { ...settings(), ...Object.fromEntries(want) });
-    if (settings().lang && settings().lang !== getLang()) setLang(settings().lang);
-    document.documentElement.style.fontSize = `${settings().textSize || 100}%`; applyLook(settings());
+  const before = choice === 'merge' ? local.tx : [], had = new Set(before.map(x => x.id));
+  const restored = choice === 'merge' ? mergeBackup(local, data) : data;
+  if (choice === 'merge' && overCap({ ...restored, customCats: restored.kv.customCats })) return impErr(t("Adding this would make Tally's data more than a backup can restore, so nothing was added."));
+  // Decode every requested image before the transaction. Ledger, images and restore metadata then land together.
+  const wanted = photosToWrite(data.tx.filter(x => !had.has(x.id)), before), receipts = [];
+  let missing = 0;
+  for (const id of wanted) {
+    const bytes = zip[`photos/${id}.jpg`];
+    const jpeg = bytes && await reencode(new Blob([bytes]));
+    if (jpeg) receipts.push({ id, blob: jpeg }); else missing++;
   }
-  await setSetting('onboarded', true);
-  await setKv('lastBackup', `${today()}T${nowTime()}`);   // restored from a backup file: that file is a backup
+  const cur = { ...settings() };
+  if (sample) { delete cur.noSpend; delete cur.friends; cur.sample = false; }
+  const want = Object.entries(data.settings || {}).filter(([k]) => choice !== 'merge' || cur[k] == null);
+  restored.kv = { ...restored.kv, settings: { ...cur, ...Object.fromEntries(want), onboarded: true }, lastBackup: `${today()}T${nowTime()}` };
+  if (choice === 'merge') {
+    const keptPhotos = new Set(local.tx.map(x => x.receiptId).filter(Boolean));
+    const gonePhotos = [...new Set((sample?.tx || []).map(x => x.receiptId).filter(id => id && !keptPhotos.has(id)))];
+    await addAll({ ...restored, receipts, del: { ...removed, receipts: gonePhotos } });
+  } else await replaceAll({ ...restored, receipts });
+  if (settings().lang && settings().lang !== getLang()) setLang(settings().lang);
+  document.documentElement.style.fontSize = `${settings().textSize || 100}%`; applyLook(settings());
   if (!settings().tourDone) await markSeen();   // a restored backup means someone who knows the app
   await tickQuietly();   // Learn Tally: what the restored data shows is done
   persistStorage();
   closeSheet(); go('home'); render();
-  // Photos from a photo backup: only ones a row it added points at, never a photo a row already here owns.
-  const wanted = photosToWrite(data.tx.filter(x => !had.has(x.id)), before);
-  // Re-encoded like any photo from outside: a crafted file in the zip is dropped, not stored.
-  const todo = Object.entries(zip).filter(([n]) => n.startsWith('photos/') && wanted.has(n.slice(7, -4)));
-  for (const [i, [n, bytes]] of todo.entries()) {
-    if (i % 25 === 0 && todo.length > 25) toast(t('Copying photos… {0} of {1}', i, todo.length));
-    const jpeg = await reencode(new Blob([bytes]));
-    if (jpeg) await savePhoto(n.slice(7, -4), jpeg);
-  }
-  toast(t('Restored {0} transactions', data.tx.length) + (data.dropped ? ` · ${t('{0} damaged entries skipped', data.dropped)}` : ''));
+  toast(t('Restored {0} transactions', data.tx.length) + (data.dropped ? ` · ${t('{0} damaged entries skipped', data.dropped)}` : '') + (missing ? ` · ${t('{0} could not be read and will be skipped', `${missing} ${t('Receipt photos')}`)}` : ''), { k: missing ? 'warn' : 'good' });
 }
 
 /** The backup, as JSON, or with photos as a zip holding the same JSON plus photos/<id>.jpg. */
@@ -728,7 +773,7 @@ function askPassword() {
 }
 const warnMissingPhotos = n => { if (n) toast(t('{0} receipt photos could not be included in this backup.', n), { k: 'warn' }); };
 const photoCount = () => new Set(S.tx.map(x => x.receiptId).filter(Boolean)).size;
-const backupFile = () => ({ name: `tally-backup-${today()}.json`, text: makeBackup({ accounts: S.accounts, tx: S.tx, recurring: S.recurring, kv: { budgets: S.kv.budgets, rules: S.kv.rules, customCats: S.kv.customCats, shopNames: S.kv.shopNames || {}, itemNames: S.kv.itemNames || {}, catColors: S.kv.catColors, catIcons: S.kv.catIcons, goals: S.kv.goals, settings: backupSettings({ monthStart: 1, weekStart: 1, textSize: 100, ...settings() }) } }) });
+const backupFile = () => ({ name: `tally-backup-${today()}.json`, text: makeBackup({ accounts: S.accounts, tx: S.tx, recurring: S.recurring, kv: { budgets: S.kv.budgets, rules: S.kv.rules, customCats: S.kv.customCats, shopNames: S.kv.shopNames || {}, itemNames: S.kv.itemNames || {}, catColors: S.kv.catColors, catIcons: S.kv.catIcons, goals: S.kv.goals, subcats: S.kv.subcats || {}, subRules: S.kv.subRules || {}, settings: backupSettings({ monthStart: 1, weekStart: 1, textSize: 100, ...settings() }) } }) });
 // ---- joint accounts: a file for the spouse, and theirs merged in -----------------------------------------------------
 const jointTx = () => { const j = jointIds(); return S.tx.filter(x => j.has(x.accountId) || j.has(x.toAccountId)); };
 const jointFile = () => ({ name: `tally-joint-${today()}.json`, text: makeJointShare({ accounts: S.accounts, tx: S.tx, kv: S.kv, recurring: S.recurring }, settings().myName || '') });
@@ -754,14 +799,17 @@ async function importJoint(data, zip = {}) {
   toast(t('{0} joint entries added or updated from {1}', theirs, from), { k: 'good', icon: 'check' });
 }
 async function backedUp(msg) {
+  const migrationCheck = !isNative && !!$('[data-act="migration-check"]');
   const first = !S.kv.lastBackup;
   await setKv('lastBackup', `${today()}T${nowTime()}`);
   const w = first && firstWord('backup');
   closeSheet(); render(); toast(w || msg, { k: 'good', icon: 'check', cheer: !!w });
+  if (migrationCheck) migrationGuide(2);
 }
 
 // ---- actions ---------------------------------------------------------------------------------------------------------------
 export const act = {
+  'desk-connect': () => import('../desk-host.js').then(m => m.openDesk()),
   // Receipt photos off the phone, entries kept: now, or automatically after a while. LHDN can ask for receipts behind a
   // tax-relief claim for 7 years, so their download comes first.
   'photos-manage': () => {
@@ -800,7 +848,7 @@ export const act = {
   },
   // A daily reminder from the phone's own calendar: no server, works with the app closed.
   'remind-google': async () => { const ev = await dailyReminder(); window.open(googleUrl(ev), '_blank', 'noopener'); },
-  'remind-ics': async () => { download('tally-daily-reminder.ics', ics([await dailyReminder()]), 'text/calendar'); toast(t('Open the file to add the reminder to your calendar.'), { k: 'good', icon: 'check' }); },
+  'remind-ics': async () => { const result = await download('tally-daily-reminder.ics', ics([await dailyReminder()]), 'text/calendar'); if (isNative && result?.cancelled !== false) return; toast(t('Open the file to add the reminder to your calendar.'), { k: 'good', icon: 'check' }); },
   feedback: () => openFeedback(APP_VERSION),
   'lock-set': async () => { if (lockOn() && !(await askCode(t('Change the lock')))) return; lockSheet(render); },
   'lock-off': async () => {
@@ -837,7 +885,7 @@ export const act = {
   'start-fresh': () => {
     openSheet(`<div class="sheethead"><h2 class="sh-title">${esc(t('Your accounts'))}</h2><button class="icon-btn" data-act="sheet-close" aria-label="${esc(t('Close'))}">${ICON.x}</button></div><p class="sh-body">${esc(t('Where do you keep money? Type what is in each today, or leave it empty if you are not sure.'))}</p>
       <div class="segs" role="group" aria-label="${esc(t('Features'))}"><button type="button" class="seg on" data-act="sf-mode" data-v="standard" aria-pressed="true">${esc(t('Standard'))}</button><button type="button" class="seg" data-act="sf-mode" data-v="simple" aria-pressed="false">${esc(t('Simple'))}</button></div>
-      <p class="fine">${esc(t('Simple is a plain money tracker: type it, see the list and totals. Change it any time in Settings → Features.'))}</p>
+      <div id="sf-mode-summary" role="status" aria-live="polite" aria-atomic="true">${setupModeSummary('standard')}</div>
       <label class="field"><span>${esc(t('Cash in wallet (RM)'))}</span><input id="sf-cash" inputmode="decimal" placeholder="0.00" autofocus></label>
       <label class="field"><span>${esc(t('Bank account (RM)'))}</span><input id="sf-bank" inputmode="decimal" placeholder="0.00"></label>
       <div class="grid2 keep2"><label class="field"><span>${esc(t('E-wallet (RM), optional'))}</span><input id="sf-ewallet" inputmode="decimal" placeholder="${esc(t('leave empty to skip'))}"></label>
@@ -847,11 +895,12 @@ export const act = {
       <p class="err" id="sf-err" role="alert"></p><button class="btn wide" data-act="sf-go">${esc(t('Start'))}</button>`, { label: t('Your accounts') });
   },
   'sf-go': async b => {
-    if ($('[data-act="sf-mode"][data-v="simple"]')?.classList.contains('on')) await setModules(PRESETS.simple);
     const vals = ['cash', 'bank', 'ewallet', 'joint', 'biz'].map(k => [k, $(`#sf-${k}`)?.value.trim() || '']);
     const bad = vals.find(([, v]) => v && calcAmount(v) == null);
     if (bad) return ($('#sf-err').textContent = amtErr(bad[1]));
     b.disabled = true;
+    const selectedMode = b.closest('.sheet').querySelector('[data-act="sf-mode"].on')?.dataset.v || 'standard';
+    await setModules(PRESETS[selectedMode]);
     const names = { cash: t('Cash'), bank: t('Bank'), ewallet: t('E-wallet'), joint: t('Joint account'), biz: t('Business') };
     let n = 0;
     names.ewallet = $('#sf-ewname').value.trim().slice(0, 40) || names.ewallet;
@@ -970,7 +1019,7 @@ export const act = {
     await setSetting('myPalette', p); await setSetting('accent', null); render(); $(`[data-act="mine-colour"][data-k="${k}"]`)?.focus();
   },
   'set-preset': async b => { const p = PRESETS[b.dataset.v]; if (!p) return; await setModules(p); render(); $(`[data-act="set-preset"][data-v="${b.dataset.v}"]`)?.focus(); toast(t('Features set: {0}', t({ simple: 'Simple', standard: 'Standard', everything: 'Everything' }[b.dataset.v]))); },
-  'sf-mode': b => { for (const x of document.querySelectorAll('[data-act="sf-mode"]')) { const o = x === b; x.classList.toggle('on', o); x.setAttribute('aria-pressed', o); } },
+  'sf-mode': b => { const sheet = b.closest('.sheet'); if (!sheet || !['simple', 'standard'].includes(b.dataset.v)) return; for (const x of sheet.querySelectorAll('[data-act="sf-mode"]')) { const o = x === b; x.classList.toggle('on', o); x.setAttribute('aria-pressed', o); } sheet.querySelector('#sf-mode-summary').innerHTML = setupModeSummary(b.dataset.v); },
   // Only on this tap does Tally go online for a rate: the European Central Bank's, via frankfurter.dev (nothing about the
   // person or their money is sent). It fills the field; the person can still type their bank's own rate.
   'rate-get': async () => {
@@ -1108,6 +1157,17 @@ export const act = {
     const touched = await commitImport(importIds(statementToTx(st.rows, { accountId }), 's'), st.provider?.[1] || t('Bank statement'), { accounts: account ? [account] : [], newAccounts: account ? [accountId] : [], kv: { settings: { ...settings(), importSources: source } }, tourLater: blind });
     if (blind) setTimeout(() => balanceTodaySheet(touched, first ? afterSetup : undefined), 300);
   },
+  'migration-guide': () => migrationGuide(),
+  'migration-dismiss': () => { $('#migration-welcome')?.remove(); },
+  'migration-restore-step': () => migrationGuide(2),
+  'migration-restore': () => { closeSheet(); act['restore-pick'](); },
+  'migration-check': () => migrationGuide(2),
+  'migration-found': () => migrationGuide(3),
+  'migration-backup': () => {
+    act['backup']();
+    const el = document.createElement('button'); el.className = 'btn ghost wide'; el.dataset.act = 'migration-check'; el.textContent = t('Check backup file');
+    $('.scrim:not(.out) .sheet')?.append(el);
+  },
   'restore-pick': () => {
     // No accept filter (Android hides .mmbackup and some .json files); importFile routes by content and size.
     const inp = Object.assign(document.createElement('input'), { type: 'file' });
@@ -1120,7 +1180,7 @@ export const act = {
     const li = (icon, s) => `<li>${icon}<span>${esc(s)}</span></li>`;
     openSheet(`<h2 class="sh-title">${esc(t('How your data is kept'))}</h2>
       <ul class="points">
-        ${li(ICON.wallet, isNative ? t('Your data stays in this app on this phone. Clearing your browser data does not delete it. Nothing is copied to a server or your other devices.') : t('Only on this phone, in the storage of the browser Tally runs in. It is not copied to a server or to your other devices: no one can bring it back, not even us.'))}
+        ${li(ICON.wallet, isNative ? t('Your book is saved in this app on this phone. Clearing browser data does not delete it. A computer you approve can view and edit it while connected. Tally keeps no cloud copy.') : t('Only on this phone, in the storage of the browser Tally runs in. It is not copied to a server or to your other devices: no one can bring it back, not even us.'))}
         ${li(ICON.check, t('What is kept: your accounts, entries, receipt photos, budgets, bills, categories and settings.'))}
         ${li(ICON.alert, isNative ? t('Uninstalling Tally, clearing its app data, or resetting this phone deletes your entries, accounts and receipt photos. Back up first.') : t("Deleted by: uninstalling Tally, clearing the browser's data for Tally, cleaner apps, a phone reset."))}
         ${iosBrowser() ? li(ICON.plusSquare, t("On iPhone, keep Tally on the Home Screen: Safari clears web apps it hasn't seen for 7 days.")) : ''}
@@ -1150,12 +1210,17 @@ export const act = {
   },
   'bk-save': async b => {
     const r = await sealedBackup(); if (!r) return;
-    if (b) b.disabled = true;   // also called from bk-share when the phone can't share files
+    b ||= $('[data-act="bk-save"]');   // also called from bk-share when the phone can't share files
+    if (b) b.disabled = true;
     const { name, blob, missing } = r;
-    download(name, blob, blob.type);
-    // Counted as a backup (else "Not backed up" nags forever), worded so the user still checks the file landed.
-    await backedUp(t('Download started. Check your Downloads folder for {0}.', name));
-    warnMissingPhotos(missing);
+    try {
+      const result = await download(name, blob, blob.type);
+      if (isNative && result?.cancelled !== false) return;
+      await backedUp(isNative ? `${t('Saved')}: ${name}` : t('Download started. Check your Downloads folder for {0}.', name));
+      warnMissingPhotos(missing);
+    } catch {
+      toast(t('Could not save. Your phone may be out of space.'), { k: 'bad' });
+    } finally { if (b?.isConnected) b.disabled = false; }
   },
   'joint-share': () => {
     const { name, text } = jointFile(), rows = jointTx(), photos = new Set(rows.map(x => x.receiptId).filter(Boolean)).size;
@@ -1180,7 +1245,8 @@ export const act = {
     const r = await sealedBackup(await backupBlob($('#jt-photos')?.checked, jointFile(), jointTx()), '#jt-pass', '#jt-err'); if (!r) return;
     if (b) b.disabled = true;
     const { name, blob, missing } = r;
-    download(name, blob, blob.type);
+    const result = await download(name, blob, blob.type);
+    if (isNative && result?.cancelled !== false) { if (b?.isConnected) b.disabled = false; return; }
     closeSheet(); toast(t('Download started. Check your Downloads folder for {0}.', name), { k: 'good', icon: 'check' }); warnMissingPhotos(missing);
   },
   'export-csv': () => download(`tally-${today()}.csv`, toCSV(S.tx, S.accounts, catName), 'text/csv'),
@@ -1221,6 +1287,7 @@ export const act = {
     openSheet(`<div class="sheethead"><h2 class="sh-title">${esc(t('Check it yourself'))}</h2><button class="icon-btn" data-act="sheet-close" aria-label="${esc(t('Close'))}">${ICON.x}</button></div>
       <p class="sh-body">${esc(t('Every address this page has fetched since it opened, as recorded by your browser (links you open in a new tab, like Google Calendar, are not in it):'))}</p>
       ${hosts.every(h => h === location.host) ? `<p class="okbox">${esc(t("Only Tally's own website. Nothing else."))}</p>` : ''}
+      ${isNative ? '<p class="fine">'+esc(t('This list shows downloaded pages and files. A computer connection uses a separate encrypted channel and is not shown here.'))+'</p>' : ''}
       <ul class="list">${hosts.map(h => `<li><span class="grow"><b>${esc(h)}</b><small>${esc(what(h))}</small></span></li>`).join('')}</ul>
       <p class="fine">${esc(t('Try this: turn on airplane mode, then add an entry. It still works. Scanning works offline too, once the receipt reader has downloaded (once, about 30 MB, from Tally\'s own site).'))}</p>
       <p class="fine"><a class="link" href="https://github.com/tallymy/tallymy.github.io" target="_blank" rel="noopener">${esc(t('Tally is open source: anyone can read the code on GitHub.'))}</a></p>`, { label: t('Check it yourself') });

@@ -1200,7 +1200,7 @@ export function receiptName(tx, taken = new Set(), dir = '') {
 }
 
 export function download(name, text, type = 'text/plain') {
-  if (isNative) { saveFile(name, new Blob([text], { type }), type).catch(e => console.error('save failed', e)); return; }   // the phone's Save as screen
+  if (isNative) return saveFile(name, new Blob([text], { type }), type);   // resolves only after the phone's Save as screen saves or cancels
   const url = URL.createObjectURL(new Blob([text], { type }));
   const a = Object.assign(document.createElement('a'), { href: url, download: name });
   document.body.appendChild(a); a.click(); a.remove();

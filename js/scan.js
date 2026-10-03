@@ -1,19 +1,20 @@
 // Reading a receipt photo on the phone: PaddleOCR (vendored, ~30 MB, loaded on first scan and cached offline),
 // then the Malaysian receipt parser. Nothing is uploaded.
 import { isNative } from './native.js';
-import { parseReceipt, rowsOf } from './parse.js';
 import { imageInfo, LIMITS } from './io.js';
+import { readSize } from './receipt-image.js';
 
 // OCR runs in a worker (js/ocr-worker.js): the screen stays responsive, and the page keeps a strict CSP.
 let worker = null, loading = null, ready = false, seq = 0;
 const pending = new Map();
 /** One OCR request. A worker that doesn't answer within 2 minutes (first run includes the 30 MB download) is reset. */
-function call(raw, onStage = () => {}, zoom = false) {
+function call(raw, onStage = () => {}, corners = null) {
   return new Promise((resolve, reject) => {
     const id = ++seq;
     const timer = setTimeout(() => { pending.delete(id); reset(); reject(new Error('The receipt reader stopped responding. Try again.')); }, 120_000);
     pending.set(id, { stage: onStage, resolve: v => { clearTimeout(timer); resolve(v); }, reject: e => { clearTimeout(timer); reject(e); } });
-    worker.postMessage({ id, raw, zoom });
+    // Hand ownership of OCR pixels to the worker instead of cloning them.
+    worker.postMessage({ id, raw, corners }, raw ? [raw.data.buffer] : []);
   });
 }
 function reset() { worker?.terminate(); worker = null; loading = null; ready = false; for (const p of pending.values()) p.reject(new Error('reset')); pending.clear(); }
@@ -65,58 +66,35 @@ async function bitmap(file) {
   if (info && info.w * info.h > LIMITS.pixels) throw new Error('too many pixels');
   return createImageBitmap(file, { imageOrientation: 'from-image' });
 }
-function draw(bmp, maxSide) {
-  const s = Math.min(1, maxSide / Math.max(bmp.width, bmp.height));
-  const c = document.createElement('canvas');
-  c.width = Math.round(bmp.width * s); c.height = Math.round(bmp.height * s);
-  c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
-  return c;
-}
-
-/** A canvas turned by quarter turns and then by -angle degrees about its centre (white corners): js/align.js on a canvas. */
-function straightened(src, turns, angle) {
-  const c = document.createElement('canvas'), q = turns % 2;
-  c.width = q ? src.height : src.width; c.height = q ? src.width : src.height;
-  const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
-  g.translate(c.width / 2, c.height / 2); g.rotate((turns * 90 - angle) * Math.PI / 180); g.drawImage(src, -src.width / 2, -src.height / 2);
-  return c;
-}
-const shrink = (src, maxSide) => { const s = Math.min(1, maxSide / Math.max(src.width, src.height)), c = document.createElement('canvas'); c.width = Math.round(src.width * s); c.height = Math.round(src.height * s); c.getContext('2d').drawImage(src, 0, 0, c.width, c.height); return c; };
-/** OCR boxes → rows with the lowest confidence of the boxes in each row: parse.js's own, so the benches read like the app. */
-const rows = rowsOf;
-
 /**
  * Photo → {receipt, text, photo, ms, turns, angle, tries}. receipt is parseReceipt's result, with item.flag set when the item is
  * worth a second look (low OCR confidence, no name, or a zero price).
  * photo is a re-encoded JPEG (max 1200 px): smaller, and the location data in the original is dropped.
  * onStage: 'prep', 'read', then 'turn' / 'straighten' when the photo needs another pass.
  */
-export async function readReceipt(file, onStage = () => {}) {
+export async function readReceipt(file, onStage = () => {}, { corners = null } = {}) {
   const t0 = performance.now();
   const bmp = await bitmap(file);
+  let pixels;
+  try {
   await loadOcr();
   onStage('prep');
-  const c = draw(bmp, 2000);
-  const { data, width, height } = c.getContext('2d').getImageData(0, 0, c.width, c.height);
+  const size = readSize(bmp.width, bmp.height), c = document.createElement('canvas');
+  c.width = size.width; c.height = size.height; c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+  pixels = c.getContext('2d').getImageData(0, 0, c.width, c.height);
+  } finally { bmp.close?.(); }
+  const { data, width, height } = pixels;
   onStage('read');
-  const aligned = await call({ data, width, height }, onStage); // the worker aligns (js/align.js) and reads
-  let lines = rows(aligned.texts), text = lines.map(l => l.text).join('\n'), receipt = parseReceipt(text), tries = aligned.tries || 1, zoomed = false;
-  // Items that don't add up (not a card slip with no items): one closer look at the paper, kept only if that one adds up.
-  if (!receipt.check.ok && (receipt.items.length || receipt.total == null)) {
-    const z = await call({ data, width, height }, onStage, true), zl = rows(z.texts), zt = zl.map(l => l.text).join('\n'), zr = parseReceipt(zt);
-    tries += z.tries || 1;
-    if (zr.check.ok) { lines = zl; text = zt; receipt = zr; zoomed = true; }
-  }
-  // The photo as it was read (turned and straightened like js/align.js did): upright on screen, and each item knows the
-  // band of it that it came from (item.crop: top and bottom as shares of the height), so the review can show it.
-  const up = aligned.turns || aligned.angle ? straightened(c, aligned.turns, aligned.angle) : c;
-  for (const it of receipt.items) {
-    const line = !zoomed && lines.find(l => it.name && l.text.includes(it.name));   // a zoomed read's rows aren't in the photo's coordinates
-    it.flag = !it.name || (line && line.conf < 0.85) || it.cents === 0;
-    if (line) it.crop = { t: Math.max(0, (line.y - line.h) / up.height), b: Math.min(1, (line.y + line.h) / up.height) };
-  }
-  const small = up === c ? draw(bmp, 1200) : shrink(up, 1200);
+  const aligned = await call({ data, width, height }, onStage, corners);
+  const { receipt, text, tries } = aligned;
+  const up = document.createElement('canvas'); up.width = aligned.raw.width; up.height = aligned.raw.height;
+  up.getContext('2d').putImageData(new ImageData(aligned.raw.data, up.width, up.height), 0, 0);
+  // Keep more vertical detail in long saved receipts so the correction strip stays legible.
+  const long = Math.max(up.width, up.height), short = Math.min(up.width, up.height);
+  const maxSide = long / short > 2.2 ? Math.min(6000, long * Math.min(1, 1000 / short)) : 1600;
+  const ratio = Math.min(1, maxSide / long), small = document.createElement('canvas');
+  small.width = Math.max(1, Math.round(up.width * ratio)); small.height = Math.max(1, Math.round(up.height * ratio));
+  small.getContext('2d').drawImage(up, 0, 0, small.width, small.height);
   const photo = await new Promise(r => small.toBlob(r, 'image/jpeg', 0.8));
-  bmp.close?.();
   return { receipt, text, photo, ms: performance.now() - t0, turns: aligned.turns, angle: aligned.angle, tries };
 }

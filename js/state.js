@@ -5,7 +5,10 @@ import { typedShift, CAPS, CAT_CODE, catName, sameCategory, mapCategory } from '
 import { keepReceiptUntil, CATEGORIES, INCOME_CATEGORIES, itemKey, cycleKey, nextColor, pickAccount, balances, isFx, rateOf, toRM, ownCategories, movedCategories, owing } from './engine.js';
 
 export const S = { accounts: [], tx: [], recurring: [], kv: {} };
-const KV_KEYS = ['settings', 'budgets', 'rules', 'customCats', 'dismissed', 'lastBackup', 'reviewDraft', 'scanQueue', 'catColors', 'catIcons', 'jointGone', 'shopNames', 'itemNames', 'goals', 'subcats', 'subRules'];   // every key setKv writes must be here, or it is lost on restart
+const KV_KEYS = ['settings', 'budgets', 'rules', 'customCats', 'dismissed', 'lastBackup', 'reviewDraft', 'scanQueue', 'catColors', 'catIcons', 'jointGone', 'shopNames', 'itemNames', 'goals', 'subcats', 'subRules', 'deskPlace', 'bookGeneration'];   // every key setKv writes must be here, or it is lost on restart
+export const bookGeneration = () => S.kv.bookGeneration;
+const bookGuard = generation => ({ kv: [{ id: 'bookGeneration', value: generation == null ? undefined : { key: 'bookGeneration', value: generation } }] });
+const TRANSIENT_KV = ['reviewDraft', 'scanQueue', 'jointGone', 'deskPlace'];
 
 /** Encrypted and not unlocked yet: nothing but the settings is loaded, and nothing may be saved. */
 export const locked = () => !!S.kv.settings?.lock?.enc && !db.getKey();
@@ -36,9 +39,12 @@ export async function load() {
 }
 // Settings apply at once (screens read them straight after) and roll back if the save fails.
 export async function setKv(k, v) {
-  const old = S.kv[k];
+  const old = S.kv[k], generation = bookGeneration();
   S.kv[k] = v;
-  try { await db.setKv(k, v); } catch (e) { if (S.kv[k] === v) S.kv[k] = old; throw e; }
+  try {
+    if (TRANSIENT_KV.includes(k)) await db.writeAtomic({ put: { kv: [{ key: k, value: v }] }, expected: bookGuard(generation) });
+    else await db.setKv(k, v);
+  } catch (e) { if (S.kv[k] === v && generation === bookGeneration()) S.kv[k] = old; throw e; }
 }
 export const settings = () => S.kv.settings;
 export const setSetting = (k, v) => setKv('settings', { ...S.kv.settings, [k]: v });
@@ -224,7 +230,39 @@ export async function bringBackCategory(id) {
 // ---- transactions -----------------------------------------------------------------------------------------------
 // Records are written to the database first and only then shown: a failed save never leaves the screen ahead of the data.
 /** Save a transaction. Saving the same id twice replaces it, so a double tap can never add it twice. */
-export async function saveTx(tx) {
+export async function saveTx(tx, { expected } = {}) {
+  if (expected !== undefined) {
+    const generation = bookGeneration();
+    // Guarded edits keep their opened row as the base; expected:null creates only an absent row.
+    const settingsRecord = await db.get('kv', 'settings');
+    const equal = (a, b) => JSON.stringify(a, (_, v) => v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.keys(v).sort().map(k => [k, v[k]])) : v) === JSON.stringify(b, (_, v) => v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.keys(v).sort().map(k => [k, v[k]])) : v);
+    if ((expected !== null && expected.id !== tx.id) || !equal(settingsRecord?.value || {}, settings())) throw Object.assign(Error('The entry changed on your phone. Refresh and try again.'), { code: 'STALE' });
+    const accountsBefore = structuredClone(S.accounts), remaining = S.tx.filter(x => x.id !== tx.id);
+    const typed = accountsBefore.filter(a => a.typed), before = typedShift(typed, remaining, expected ? [expected] : [], today()), after = typedShift(typed, remaining, [tx], today());
+    const touched = new Set([expected?.accountId, expected?.toAccountId, tx.accountId, tx.toAccountId].filter(Boolean));
+    if ([tx.accountId, tx.toAccountId].filter(Boolean).some(id => !accountsBefore.some(a => a.id === id))) throw Object.assign(Error('The entry changed on your phone. Refresh and try again.'), { code: 'STALE' });
+    const changed = new Map();
+    for (const a of accountsBefore) {
+      const delta = (after[a.id] || 0) - (before[a.id] || 0);
+      if (delta) changed.set(a.id, { ...a, opening: (a.opening || 0) + delta, updatedAt: Date.now() });
+    }
+    // A foreign-currency transfer updates its rate in the same guarded account write, as rateFrom does for new entries.
+    const a = accountsBefore.find(a => a.id === tx.accountId), b = accountsBefore.find(a => a.id === tx.toAccountId);
+    if (tx.toAmount && a && b && isFx(a) !== isFx(b)) {
+      const [fx, rm, units] = isFx(a) ? [a, tx.toAmount, tx.amount] : [b, tx.amount, tx.toAmount];
+      changed.set(fx.id, { ...(changed.get(fx.id) || fx), rate: +(rm / units).toFixed(4), updatedAt: Date.now() });
+    }
+    const joint = new Set(accountsBefore.filter(a => a.scope === 'joint').map(a => a.id));
+    const wasJoint = joint.has(expected?.accountId) || joint.has(expected?.toAccountId), stillJoint = joint.has(tx.accountId) || joint.has(tx.toAccountId);
+    const goneRecord = wasJoint && !stillJoint ? await db.get('kv', 'jointGone') : null;
+    const kv = wasJoint && !stillJoint ? { jointGone: Object.fromEntries([...Object.entries(goneRecord?.value || {}), [tx.id, Date.now()]].slice(-1000)) } : {};
+    tx = stamp(tx);
+    await db.writeAtomic({ put: { tx: [tx], accounts: [...changed.values()], kv: kvRows(kv) }, expected: {
+      tx: [{ id: tx.id, value: expected ?? undefined }], accounts: accountsBefore.filter(a => touched.has(a.id)).map(a => ({ id: a.id, value: a })),
+      kv: [...bookGuard(generation).kv, { id: 'settings', value: settingsRecord ?? undefined }, ...(wasJoint && !stillJoint ? [{ id: 'jointGone', value: goneRecord ?? undefined }] : [])],
+    } });
+    await load(); return tx;
+  }
   const left = leftJoint([tx]);
   tx = stamp(tx);
   await db.put('tx', tx);
@@ -310,7 +348,7 @@ export async function deleteBill(id) {
 }
 /** true when saved. Photos are nice-to-have, so a failure doesn't stop the caller; the user still sees it (onSaveFailed). */
 // The localStorage fallback (no IndexedDB: some private windows) can't hold a photo's bytes: say so, don't store {}.
-export const savePhoto = (id, blob) => (db.storageMode() === 'localstorage' && blob instanceof Blob ? Promise.resolve(false) : db.put('receipts', { id, blob }).then(() => true, () => false));
+export const savePhoto = (id, blob, guard = null) => (db.storageMode() === 'localstorage' && blob instanceof Blob ? Promise.resolve(false) : (guard ? db.writeAtomic({ put: { receipts: [{ id, blob }] }, expected: bookGuard(guard.generation) }) : db.put('receipts', { id, blob })).then(() => true, () => false));
 export const deletePhotos = ids => db.delMany('receipts', ids).catch(() => {});
 // A photo that went through JSON (saved by the fallback before it refused them) comes back as {}: that is no photo.
 export const getPhoto = id => db.get('receipts', id).then(r => (r?.blob && Object.getPrototypeOf(r.blob) !== Object.prototype ? r.blob : null)).catch(() => null);
@@ -339,22 +377,25 @@ export async function sweepPhotos() {
 const BACKUP_KV = ['budgets', 'rules', 'customCats', 'dismissed', 'shopNames', 'itemNames', 'catColors', 'catIcons', 'goals', 'subcats', 'subRules'];
 const kvRows = kv => Object.entries(kv || {}).filter(([k, v]) => KV_KEYS.includes(k) && v != null).map(([key, value]) => ({ key, value }));
 /** Replace everything with a backup, all or nothing: old photos and the settings a backup carries go too. */
-export async function replaceAll({ accounts, tx, recurring, kv }) {
-  await db.writeAtomic({ clear: ['accounts', 'tx', 'recurring', 'receipts'], del: { kv: BACKUP_KV }, put: { accounts, tx, recurring, kv: kvRows(kv) } });
+export async function replaceAll({ accounts, tx, recurring, kv, receipts = [] }) {
+  const nextKv = Object.fromEntries(Object.entries(kv || {}).filter(([key]) => !TRANSIENT_KV.includes(key)));
+  await db.writeAtomic({ clear: ['accounts', 'tx', 'recurring', 'receipts'], del: { kv: [...BACKUP_KV, ...TRANSIENT_KV] }, put: { accounts, tx, recurring, receipts, kv: kvRows({ ...nextKv, bookGeneration: uid('book_') }) } });
   await load();
+  if (typeof globalThis.document?.dispatchEvent === 'function') document.dispatchEvent(new Event('tally:book-replaced'));
 }
 /** Add a merged backup's new records and settings, all or nothing. Existing records are never rewritten. */
-export async function addAll({ accounts, tx, recurring, kv }) {
+export async function addAll({ accounts, tx, recurring, kv, receipts = [], del = {} }) {
   const has = (list, ids) => list.filter(x => !ids.has(x.id));
-  await db.writeAtomic({ put: {
-    accounts: has(accounts, new Set(S.accounts.map(a => a.id))), tx: has(tx, new Set(S.tx.map(t => t.id))),
-    recurring: has(recurring, new Set(S.recurring.map(r => r.id))), kv: kvRows(kv),
+  const kept = (list, store) => new Set(list.filter(x => !(del[store] || []).includes(x.id)).map(x => x.id));
+  await db.writeAtomic({ del, put: {
+    accounts: has(accounts, kept(S.accounts, 'accounts')), tx: has(tx, kept(S.tx, 'tx')),
+    recurring: has(recurring, kept(S.recurring, 'recurring')), receipts, kv: kvRows(kv),
   } });
   await load();
 }
 /** Write records as given, overwriting (a spouse's newer joint edits), all or nothing. `edit`: the user's own change
  *  (an import and its Undo), stamped and with joint delete markers like saveTxs and deleteTxs, in the same write. */
-export async function putAll({ accounts = [], tx = [], recurring = [], kv = {}, del = {}, edit = false, mark = true }) {
+export async function putAll({ accounts = [], tx = [], recurring = [], kv = {}, del = {}, edit = false, mark = true, expected = {} }) {
   if (edit) {
     // Only rows this write deletes and doesn't put back: a row put back next to its own marker was deleted by the next swap.
     const j = jointIds(), back = new Set(tx.map(t => t.id)), dead = new Set((del.tx || []).filter(id => !back.has(id)));
@@ -362,7 +403,7 @@ export async function putAll({ accounts = [], tx = [], recurring = [], kv = {}, 
     tx = tx.map(stamp);
     if (joint.length) kv = { ...kv, jointGone: withGone(joint) };
   }
-  await db.writeAtomic({ del, put: { accounts, tx, recurring, kv: kvRows(kv) } });
+  await db.writeAtomic({ del, put: { accounts, tx, recurring, kv: kvRows(kv) }, expected });
   await load();
 }
 /** The old address (it shares its site with another app): Tally has moved to NEW_HOME. */

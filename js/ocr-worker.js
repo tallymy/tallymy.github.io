@@ -2,7 +2,7 @@
 // needs `new Function`) runs here instead of loosening the page's Content Security Policy.
 // The browser OCR build draws through document.createElement('canvas'); a worker has OffscreenCanvas instead.
 self.document = { createElement: () => new OffscreenCanvas(1, 1) };
-import { readAligned, zoomPaper } from './align.js';
+import { readDocument } from './receipt-read.js';
 
 let ocr = null;
 async function ready() {
@@ -23,13 +23,12 @@ async function ready() {
 // One read at a time: a read-ahead of the next photo and a retry must not run the model at once.
 let chain = Promise.resolve();
 self.onmessage = e => { chain = chain.then(() => read(e.data)); };
-async function read({ id, raw, zoom }) {
+async function read({ id, raw, corners }) {
   try {
     const o = await ready();
     if (!raw) return self.postMessage({ id, texts: [] });
     // Straighten first (sideways/upside-down turns, big tilts): the pixel work stays off the page's thread.
-    if (zoom) self.postMessage({ id, stage: 'zoom' });
-    const r = await readAligned(x => o.detect(x), zoom ? zoomPaper(raw) : raw, stage => self.postMessage({ id, stage }));   // zoom: the second look (align.js)
-    self.postMessage({ id, texts: r.texts.map(({ text, mean, box }) => ({ text, mean, box })), turns: r.turns, angle: r.angle, tries: r.tries });
+    const r = await readDocument(x => o.detect(x), raw, stage => self.postMessage({ id, stage }), corners);
+    self.postMessage({ id, receipt: r.receipt, text: r.text, raw: r.raw, turns: r.turns, angle: r.angle, tries: r.tries, retried: r.retried }, [r.raw.data.buffer]);
   } catch (e) { self.postMessage({ id, error: String(e?.message || e) }); }
 }
