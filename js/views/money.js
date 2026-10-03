@@ -3,7 +3,7 @@ import { S, jointIds, saveTx, keepToday, saveAccount, addCategory, incomeCats, c
 import { t, fmtDate, fmtMonth, monShort, getLang, langTag } from '../i18n.js';
 import { esc, ICON, openSheet, closeSheet, confirmSheet, toast, lineChart, $, landed, announce } from '../ui.js';
 import { firstWord } from './learn.js';
-import { RELIEFS, reliefGuess, firstSpend, subsOf, subFor, learnSub, fmtRM, unmarkedPayments, parseAmount, itemKey, categorize, addMonths, monthOf, monthSpend, monthSpends, byDate, leftOverPaybacks, pace, validIso, findDuplicate, recurringCandidates, billKey, INCOME_CATEGORIES, calcAmount, cycleKey, cycleSpan, addDays, billDates, billStatus, dueBillTxs, tooLarge, isFx, fmtAcct, owing } from '../engine.js';
+import { RELIEFS, reliefGuess, firstSpend, subsOf, subFor, learnSub, fmtRM, unmarkedPayments, parseAmount, itemKey, categorize, addMonths, monthOf, monthSpend, monthSpends, byDate, leftOverPaybacks, pace, validIso, findDuplicate, recurringCandidates, billKey, INCOME_CATEGORIES, calcAmount, cycleKey, cycleSpan, addDays, billDates, billStatus, dueBillTxs, tooLarge, isFx, fmtAcct, owing, lateTypedHint } from '../engine.js';
 import { billEvent, ics, googleUrl, safeId } from '../calendar.js';
 import { download, receiptName, zipStore, toCSV } from '../io.js';
 import { catIcon } from '../caticons.js';
@@ -96,6 +96,8 @@ const hasWords = v => /\p{L}/u.test(v) && /\d/.test(v);
 export const input = {
   // A refund linked to its purchase goes back to that purchase's category.
   'tx-refof': el => { const x = S.tx.find(y => y.id === el.value), c = x && (x.items?.[0]?.category || x.category); if (c && $('#tx-refcat')?.querySelector(`option[value="${CSS.escape(c)}"]`)) $('#tx-refcat').value = c; },
+  // Picking an earlier day takes the reminder away: that is what it asks for.
+  'tx-date': el => { const h = $('#tx-hint'); if (h) h.hidden = !lateTypedHint(S.accounts.find(a => a.id === ($('#tx-acc')?.value || draft?.accountId)), el.value, today()); },
   'tx-acc': () => { accPicked = true; reopen(); },   // the amount's currency, and "Received" between two currencies
   // The split button is always there (a number keypad has no letters); it lights up when words are typed.
   'tx-amt': el => { const b = $('#tx-words'); if (b) b.classList.toggle('ghost', !hasWords(el.value)); el.removeAttribute('aria-invalid'); },
@@ -184,10 +186,11 @@ function sheetHtml() {
   // A day other than today (a missed day, a bill's due date) is named in the title, so it can't be missed,
   const day = isNew && d.date !== today() ? `${new Intl.DateTimeFormat(langTag(), { weekday: 'short', timeZone: 'UTC' }).format(new Date(`${d.date}T00:00:00Z`))} ${fmtDate(d.date)}` : '';
   // and its date sits right under the amount, not down where the keyboard and the sum bar cover it.
+  const hintAcc = S.accounts.find(a => a.id === d.accountId);
   const when = `<div class="grid2 keep2">
-      <label class="field"><span>${esc(t('Date'))}</span><input id="tx-date" type="date" min="1990-01-01" value="${esc(d.date)}" max="${esc(today())}"></label>
+      <label class="field"><span>${esc(t('Date'))}</span><input id="tx-date" data-input="tx-date" type="date" min="1990-01-01" value="${esc(d.date)}" max="${esc(today())}"></label>
       <label class="field"><span>${esc(t('Time'))}</span><input id="tx-time" inputmode="numeric" maxlength="5" autocomplete="off" placeholder="13:40" value="${esc(d.time || '')}"></label>
-    </div>`;
+    </div>${isNew && d.type !== 'transfer' ? `<p class="fine" id="tx-hint"${lateTypedHint(hintAcc, d.date, today()) ? '' : ' hidden'}>${esc(t("Did this happen before you typed this account's balance? Pick that day so it isn't counted twice."))}</p>` : ''}`;
   return `<h2 class="sh-title">${esc(!isNew ? t('Edit') : day ? t('Add for {0}', day) : t('Add'))}</h2>
     <div class="segs" role="group" aria-label="${esc(t('Type'))}">${seg}</div>
     <label class="field amount"><span>${esc(amtLabel(d.accountId))}</span><input id="tx-amt" data-input="tx-amt" inputmode="decimal" autocomplete="off" aria-describedby="tx-err" value="${d.amount ? (d.amount / 100).toFixed(2) : ''}" ${d.items?.length || d.split ? 'readonly' : isNew ? 'autofocus' : ''} placeholder="0.00"></label>

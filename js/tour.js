@@ -11,6 +11,9 @@ export const WHATS_NEW = {
     'Split bills with several payers, assign tax and service, or treat a friend to the unpaid rest',
     'The Android app keeps your data in its own storage and opens files shared from other apps',
   ],
+  '1.12.5': [
+    "A reminder when you log something that happened before you typed an account's balance, so it isn't counted twice",
+  ],
   '1.12.4': [
     "Clearer, more natural wording in Bahasa Melayu, 中文, 繁體中文, 日本語 and தமிழ்",
     "Saved stickers are much smaller, so they send faster",

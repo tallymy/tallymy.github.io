@@ -183,6 +183,15 @@ export function addDays(iso, n) {
 /** Order of two ISO dates (or 'HH:MM' times): plain string order, many times faster than localeCompare. */
 export const byDate = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 export const daysBetween = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 864e5);
+/** Should the entry sheet remind that this entry may already be inside a balance typed a few days ago? A balance typed
+ *  within the last 3 days counts everything dated on or after that day as spent after it: something paid earlier but logged
+ *  with today's date would come off twice. Only for an account whose balance was typed (not an app's history). */
+export function lateTypedHint(account, date, today) {
+  if (!account || !account.typed || !(account.createdAt > 0) || account.outside || owing(account)) return false;
+  const d = new Date(account.createdAt), made = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const day = made < today ? made : today;   // an account can't be made later than today (a clock that moved back)
+  return date >= day && daysBetween(day, today) <= 3;
+}
 const pad2 = n => String(n).padStart(2, '0');
 /**
  * The budget month holding `iso` when months start on `startDay` (1–28, a payday): {start, end, key}. key is the
