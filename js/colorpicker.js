@@ -78,8 +78,8 @@ export const paletteFor = s => (s?.appPalette === 'mine' && okMine(s.myPalette) 
 const surfaceVars = (m, s) => { const ink = m === 'dark' ? '#EEF2FA' : '#0F172A';
   return `--bg:${s[0]};--panel:${s[1]};--panel2:${s[2]};--ink:${readable(ink, s, 7)};--mute:${readable(mix(ink, s[0], 0.42), s)};--line:${m === 'dark' ? 'rgba(255,255,255,.1)' : mix(s[2], '#000000', 0.1)};`; };
 const paletteCss = p => `:root{${surfaceVars('dark', p.dark)}}:root[data-theme="light"]{${surfaceVars('light', p.light)}}@media (prefers-color-scheme: light){:root:not([data-theme="dark"]){${surfaceVars('light', p.light)}}}`;
-/** Put a <style> with this id in <head> (css text), or take it out (null). */
-const styleTag = (id, css) => { let st = document.getElementById(id); if (!css) return st?.remove(); if (!st) { st = document.createElement('style'); st.id = id; document.head.append(st); } if (st.textContent !== css) st.textContent = css; };
+/** Runtime colours follow the base stylesheet, which loads at the end of body. */
+const styleTag = (id, css) => { let st = document.getElementById(id); if (!css) return st?.remove(); if (!st) { st = document.createElement('style'); st.id = id; } if (st.textContent !== css) st.textContent = css; (document.body || document.head).append(st); };
 /** The CSS for a chosen accent, in the same shape as the theme tokens (forced theme, or the system's). */
 export const accentCss = a => `:root{${accentVars(a, 'dark')}}:root[data-theme="light"]{${accentVars(a, 'light')}}@media (prefers-color-scheme: light){:root:not([data-theme="dark"]){${accentVars(a, 'light')}}}`;
 export const themeNow = () => document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
