@@ -2,6 +2,7 @@
 // JSON backup. Everything read from a file is untrusted: sizes, dates and amounts are checked.
 import { RELIEFS, parseAmount, validIso, daysBetween, CATEGORIES, INCOME_CATEGORIES, categorize, shopCategory, incomeCategory, allocate, movedTo, ACCOUNT_KINDS, OWING_KINDS } from './engine.js';
 import { CAT_ICONS } from './caticons.js';
+import { isNative, saveFile } from './native.js';
 
 export const LIMITS = { fileBytes: 25 * 1024 * 1024, backupBytes: 200 * 1024 * 1024, backupJson: 50 * 1024 * 1024, photoBytes: 40 * 1024 * 1024, pixels: 50_000_000, rows: 50_000, text: 200 };
 
@@ -926,10 +927,11 @@ export function readBackup(text) {
   // A friend's name (a split bill): as the split sheet takes it, and never a key that reaches an object's prototype.
   const friend = v => { const s = typeof v === 'string' ? cleanText(v, 20) : ''; return s && !RESERVED.has(s) ? s : ''; };
   const cleanItems = arr => arr.filter(i => isObj(i) && okSigned(i.cents)).slice(0, 500).map(i => ({ name: cleanText(i.name, 80), raw: cleanText(i.raw, 80), cents: i.cents, category: cat(i.category), ...(Number.isInteger(i.qty) && i.qty > 1 && i.qty < 10000 && okSigned(i.unit) ? { qty: i.qty, unit: i.unit } : {}) }));
-  // A split bill: what was really paid, with whom, who had what ('' = me), the receipt's items and the account that paid
-  // when a friend did. My share can be nothing (amount 0).
+  // A split bill: what was really paid, with whom, who had what ('' = me), who put down what at the counter ('' = me),
+  // the receipt's items and the account that paid when a friend did. My share can be nothing (amount 0).
+  const paidOf = p => { if (!isObj(p)) return null; const e = Object.entries(p).slice(0, 9).filter(([k, v]) => (k === '' || friend(k)) && okAmt(v)).map(([k, v]) => [k === '' ? '' : friend(k), v]); return e.length ? Object.fromEntries(e) : null; };
   const split = s => (isObj(s) && okAmt(s.total) && s.total > 0 ? { total: s.total, with: list(s.with, 8).map(friend).filter(Boolean),
-    who: list(s.who, 500).map(w => list(w, 8).filter(p => p === '' || friend(p)).map(p => p && friend(p))), ...(Array.isArray(s.items) ? { items: cleanItems(s.items) } : {}), ...(ids.has(s.acc) ? { acc: s.acc } : {}) } : null);
+    who: list(s.who, 500).map(w => list(w, 8).filter(p => p === '' || friend(p)).map(p => p && friend(p))), ...(Array.isArray(s.items) ? { items: cleanItems(s.items) } : {}), ...(paidOf(s.paid) ? { paid: paidOf(s.paid) } : {}), ...(ids.has(s.acc) ? { acc: s.acc } : {}) } : null);
   // A friend's debt rides only on the row that moves it (as splitRows and Paid back write them): a share into Owed to you,
   // a payback out of it, a bill a friend paid in You owe, my payback into it. Anywhere else (a partner's joint rows, which
   // never touch these accounts) it would put a made-up debt on Home.
@@ -1198,6 +1200,7 @@ export function receiptName(tx, taken = new Set(), dir = '') {
 }
 
 export function download(name, text, type = 'text/plain') {
+  if (isNative) { saveFile(name, new Blob([text], { type }), type).catch(e => console.error('save failed', e)); return; }   // the phone's Save as screen
   const url = URL.createObjectURL(new Blob([text], { type }));
   const a = Object.assign(document.createElement('a'), { href: url, download: name });
   document.body.appendChild(a); a.click(); a.remove();

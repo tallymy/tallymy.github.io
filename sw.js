@@ -1,8 +1,8 @@
 // Offline cache (adapted from we go gim). Bump VERSION whenever app files change.
-const VERSION = 'tally-v65';
+const VERSION = 'tally-v66';
 const CORE = [
   './', './index.html', './privacy.html', './privacy.ms.html', './privacy.zh.html', './privacy.zh-Hant.html', './privacy.ja.html', './terms.html', './terms.ms.html', './terms.zh.html', './terms.zh-Hant.html', './terms.ja.html', './licences.html', './build.txt', './manifest.webmanifest', './css/app.css', './icons/icon.svg',
-  './js/app.js', './js/state.js', './js/db.js', './js/engine.js', './js/cpi.js', './js/ui.js', './js/io.js', './js/i18n.js', './js/parse.js', './js/brands.js', './js/shops.js', './js/comic.js', './js/first.js', './js/books/cast.js', './js/books/10.js', './js/books/11.js', './js/books/12.js',
+  './js/app.js', './js/state.js', './js/db.js', './js/engine.js', './js/cpi.js', './js/ui.js', './js/io.js', './js/i18n.js', './js/parse.js', './js/brands.js', './js/shops.js', './js/comic.js', './js/first.js', './js/native.js', './js/books/cast.js', './js/books/10.js', './js/books/11.js', './js/books/12.js',
   './js/align.js', './js/scan.js', './js/ocr-worker.js', './js/calendar.js', './js/mmimport.js', './js/statement.js', './js/presets.js', './js/feedback.js', './js/tour.js', './js/lock.js', './js/camera.js', './js/camcheck.js', './js/colorpicker.js', './js/learn.js', './js/gamify.js', './js/delight.js', './js/stickers.js', './js/features.js', './js/caticons.js', './js/sample.js', './js/share.js', './js/share-art.js', './js/sticker-export.js',
   './js/views/home.js', './js/views/money.js', './js/views/review.js', './js/views/setup.js', './js/views/learn.js', './js/views/analytics.js', './js/views/splitbill.js', './js/views/goals.js', './js/i18n/ms.js', './js/i18n/zh.js', './js/i18n/zh-Hant.js', './js/i18n/ja.js', './js/i18n/ta.js',
 ];

@@ -11,6 +11,7 @@ import { onboarding, registerSW } from './tour.js';
 import { startScan } from './camera.js';
 import { applyLook, applySavedLook } from './colorpicker.js';
 import { on } from './features.js';
+import { sharedFiles, onShared } from './native.js';
 
 applySavedLook();   // theme and accent before anything is drawn (the database copy is applied on every render)
 
@@ -166,7 +167,14 @@ window.addEventListener('error', e => { if (!document.getElementById('app')?.chi
 window.addEventListener('unhandledrejection', e => console.error(e.reason));
 
 /** Files shared into Tally (Money Manager → Export → Share, Gallery, WhatsApp): photos go to the scanner, the rest to import. */
+function openShared(files) {
+  const photos = files.filter(f => f.type.startsWith('image/')), other = files.filter(f => !f.type.startsWith('image/'));
+  if (other.length) setTimeout(async () => (await need('setup')).importFile(other[0]), 400);   // one import at a time
+  else if (photos.length) return need('review').then(m => { m.enqueue(photos); history.replaceState(null, '', '#/review'); });
+}
 async function takeShared() {
+  const direct = await sharedFiles();   // the Android app gets them straight from the phone's share sheet; none elsewhere
+  if (direct.length) { history.replaceState(null, '', '#/home'); return openShared(direct); }
   if (!('caches' in window)) return;
   if (route() !== 'share') return caches.delete('tally-share').catch(() => {});   // shared files never wait past a start
   history.replaceState(null, '', '#/home');
@@ -174,9 +182,7 @@ async function takeShared() {
   const files = [];
   for (const k of keys) { const r = await c.match(k); files.push(new File([await r.blob()], decodeURIComponent(r.headers.get('x-name') || 'shared'), { type: r.headers.get('x-type') || '' })); }
   await caches.delete('tally-share');
-  const photos = files.filter(f => f.type.startsWith('image/')), other = files.filter(f => !f.type.startsWith('image/'));
-  if (other.length) setTimeout(async () => (await need('setup')).importFile(other[0]), 400);   // one import at a time
-  else if (photos.length) { (await need('review')).enqueue(photos); history.replaceState(null, '', '#/review'); }
+  return openShared(files);
 }
 export const refresh = () => { if (!sheetOpen()) render(); };
 (async () => {
@@ -203,6 +209,7 @@ export const refresh = () => { if (!sheetOpen()) render(); };
     if (storageMode() === 'localstorage') setTimeout(() => toast(t('Private browsing: data may be lost when you close this tab.'), { k: 'warn' }), 800);
     if (!location.hash && settings().start === 'activity') { history.replaceState(null, '', '#/activity'); shown = 'activity'; }   // start screen
     await takeShared();
+    onShared(async files => { while (locked()) await new Promise(r => setTimeout(r, 500)); openShared(files); });   // shared while Tally is already open (Android app)
     if (!S.accounts.length) await need('setup');   // Welcome shows at once
     const resumed = S.kv.reviewDraft?.draft || S.kv.scanQueue?.length ? await (await need('review')).restoreDraft() : false;   // nothing to resume: its code can wait
     if (resumed === 'waiting') toast(t('A receipt is waiting for the reader. Open Scan when you are on Wi-Fi.'));

@@ -1,5 +1,5 @@
 // Home (balance, month, one banner, recent) and Insights (charts, habits, the insight feed).
-import { S, today, nowLocal, nowTime, settings, setKv, setSetting, cat, booked, scopedAccounts, budgetsFor, inScope, startDay, thisMonth, cached, OLD_HOME, NEW_HOME, wipeSite, saveTx, keepToday, uid, defaultAccount } from '../state.js';
+import { S, today, nowLocal, nowTime, settings, setKv, setSetting, cat, booked, scopedAccounts, budgetsFor, inScope, startDay, thisMonth, cached, OLD_HOME, NEW_HOME, wipeSite, saveTx, keepToday, uid, defaultAccount, putAll } from '../state.js';
 import { t, fmtDate, fmtMonth, monShort, cycleShort, getLang } from '../i18n.js';
 import { esc, ICON, MASK, balHidden, eyeBtn, lineChart, pairBars, donut, openSheet, toast, countUp, replay, landing, $, confirmSheet, closeSheet, landed } from '../ui.js';
 import { firstSpend, fmtRM, balances, monthOf, monthSpend, monthSpends, monthIncomes, addMonths, pace, cashFlow, balanceTrend, insights, habits, dueNudge, daysBetween, itemKey, cycleKey, cycleSpan, billStatus, newest, fmtAcct, offTotal, isFx, rateOf, belowSince, CATEGORIES, affordCheck, topCats, calcAmount, recurringCandidates, owing, openShares, validIso, affordMoney } from '../engine.js';
@@ -307,18 +307,25 @@ function repaySheet(kind, name) {
     <label class="field amount"><span>${esc(t('Amount (RM)'))}</span><input id="rp-amt" inputmode="decimal" autocomplete="off" aria-describedby="rp-err" value="${(f.sen / 100).toFixed(2)}"></label>
     <div class="grid2 keep2"><label class="field"><span>${esc(back ? t('Into account') : t('From'))}</span><select id="rp-acc">${accts.map(a => `<option value="${esc(a.id)}"${a.id === pick ? ' selected' : ''}>${esc(accName(a.id))}</option>`).join('')}</select></label>
     <label class="field"><span>${esc(t('Date'))}</span><input id="rp-date" type="date" min="1990-01-01" max="${esc(tdy)}" value="${esc(tdy)}"></label></div>
+    ${back ? `<label class="check"><input type="checkbox" id="rp-halal"> ${esc(t('Let the rest go — my treat'))}</label>` : ''}
     <p class="err" id="rp-err" role="alert"></p>
     <div class="row2"><button class="btn ghost" data-act="sheet-close">${esc(t('Cancel'))}</button><button class="btn" data-x="save">${esc(t('Save'))}</button></div>`, { label: back ? t('Paid back') : t('Pay back') });
   el.addEventListener('click', async e => {
     const b = e.target.closest('[data-x="save"]'); if (!b) return;
-    const amount = calcAmount(el.querySelector('#rp-amt').value), date = el.querySelector('#rp-date').value, acc = el.querySelector('#rp-acc').value, err = m => { el.querySelector('#rp-err').textContent = m; };
-    if (!(amount > 0)) return err(t('Enter an amount, for example 12.50.'));
+    const amount = el.querySelector('#rp-amt').value.trim() === '' ? 0 : calcAmount(el.querySelector('#rp-amt').value), date = el.querySelector('#rp-date').value, acc = el.querySelector('#rp-acc').value, err = m => { el.querySelector('#rp-err').textContent = m; };
+    const halal = !!el.querySelector('#rp-halal')?.checked, rest = f.sen - (amount || 0);
+    if (!(amount > 0) && !(halal && amount === 0)) return err(t('Enter an amount, for example 12.50.'));
     if (amount > f.sen) return err(t('At most {0}.', fmtRM(f.sen)));   // more back than is owed would be money from nowhere
     if (!validIso(date) || date > tdy) return err(t('Pick a date.'));
     b.disabled = true;
-    const x = { id: uid('t'), type: 'transfer', date, amount, accountId: back ? box.id : acc, toAccountId: back ? acc : box.id, category: 'other', merchant: name, [back ? 'repaidBy' : 'repaidTo']: name, source: 'quick', createdAt: Date.now() };
-    await saveTx(x); await keepToday(x);
-    closeSheet(); landed(x.id); render(); toast(t('Saved'), { icon: 'check' });
+    const x = amount > 0 ? { id: uid('t'), type: 'transfer', date, amount, accountId: back ? box.id : acc, toAccountId: back ? acc : box.id, category: 'other', merchant: name, [back ? 'repaidBy' : 'repaidTo']: name, source: 'quick', createdAt: Date.now() } : null;
+    if (x) { await saveTx(x); await keepToday(x); }
+    // The rest let go: as if the friend paid it back and I spent it on them, so nothing stays open and it's my spending.
+    if (halal && rest > 0) await putAll({ tx: [
+      { id: uid('t'), type: 'transfer', date, amount: rest, accountId: box.id, toAccountId: acc, category: 'other', merchant: name, repaidBy: name, source: 'quick', createdAt: Date.now() },
+      { id: uid('t'), type: 'expense', date, amount: rest, accountId: acc, category: 'other', merchant: name, note: t('My treat'), source: 'quick', createdAt: Date.now() },
+    ], edit: true });
+    closeSheet(); if (x) landed(x.id); render(); toast(t('Saved'), { icon: 'check' });
   });
 }
 let onScreen = null, drawn = null;   // the totals Home showed last, and the ones just drawn: a save counts from one to the other

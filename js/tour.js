@@ -3,6 +3,7 @@ import { S, settings, setKv, persistStorage } from './state.js';
 import { t, getLang } from './i18n.js';
 import { esc, ICON, openSheet, closeSheet, toast, hideToast, announce } from './ui.js';
 import { render, route, go, APP_VERSION } from './app.js';
+import { isNative } from './native.js';
 
 // Newest first. Written for users; each line is translated.
 export const WHATS_NEW = {
@@ -323,7 +324,7 @@ export function afterSetup() {
 let installEvt = null;
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; if (['settings', 'welcome'].includes(route())) render(); });
 window.addEventListener('appinstalled', () => { installEvt = null; toast(t('Installed. Open Tally from your home screen.'), { k: 'good', icon: 'check' }); });
-const installed = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const installed = () => isNative || matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 /** Offered in every browser until Tally runs as an app: one tap where the browser allows it, its own steps everywhere else. */
 export const canInstall = () => !!installEvt || !installed();
 export async function promptInstall() {
@@ -336,6 +337,7 @@ export async function promptInstall() {
 // ---- updates ---------------------------------------------------------------------------------------------------------
 /** Manual check (Settings): 'latest', 'updating' or 'unsupported'. A found update installs and reloads by itself. */
 export async function checkForUpdates() {
+  if (isNative) return 'unsupported';   // the app updates through Google Play
   const reg = await navigator.serviceWorker?.getRegistration?.();
   if (!reg) return 'unsupported';
   await reg.update();
@@ -350,7 +352,7 @@ export async function holdUpdates(on) {
 }
 /** Register the service worker; reload once when a new version takes over, never mid-typing, mid-review or with a sheet open. */
 export function registerSW(blocked) {
-  if (!('serviceWorker' in navigator) || location.protocol !== 'https:') return;
+  if (isNative || !('serviceWorker' in navigator) || location.protocol !== 'https:') return;   // the app's files are inside it: no offline worker
   try { if (sessionStorage.getItem('tally-updated')) { sessionStorage.removeItem('tally-updated'); setTimeout(() => toast(t('Updated to the latest version'), { k: 'good', icon: 'check' }), 300); } } catch {}
   navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then(reg => {
     // An installed app can stay open for days: look for updates whenever it comes back to the front.

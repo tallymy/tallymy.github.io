@@ -1,5 +1,6 @@
 // In-memory state over IndexedDB. Views read S; every change goes through a function here so it is saved.
 import * as db from './db.js';
+import { isNative } from './native.js';
 import { typedShift, CAPS, CAT_CODE, catName, sameCategory, mapCategory } from './io.js';
 import { keepReceiptUntil, CATEGORIES, INCOME_CATEGORIES, itemKey, cycleKey, nextColor, pickAccount, balances, isFx, rateOf, toRM, ownCategories, movedCategories, owing } from './engine.js';
 
@@ -383,7 +384,7 @@ export const storageMode = db.storageMode;
 /** Ask the browser not to clear Tally's data when space runs low. persisted: true, false, or null (not known yet / unsupported). */
 export const storage = { persisted: null };
 export async function persistStorage() {
-  if (!globalThis.navigator?.storage?.persist) return null;
+  if (isNative || !globalThis.navigator?.storage?.persist) return null;   // the app's own storage isn't the browser's to clear
   try { storage.persisted = (await navigator.storage.persisted()) || (await navigator.storage.persist()); } catch { storage.persisted = false; }
   return storage.persisted;
 }

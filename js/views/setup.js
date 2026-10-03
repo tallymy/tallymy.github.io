@@ -9,6 +9,7 @@ import { detectPreset } from '../presets.js';
 import { parseStatement, statementToTx, linesFromItems, detectProvider, guessKind, PAGE_BREAK, isWallet } from '../statement.js';
 import { render, go, APP_VERSION, MAKER, CONTACT } from '../app.js';
 import { openFeedback } from '../feedback.js';
+import { isNative } from '../native.js';
 import { dailyEvent, ics, googleUrl } from '../calendar.js';
 import { showTour, showWhatsNew, siteUrl, afterSetup, markSeen, canInstall, promptInstall, checkForUpdates, holdUpdates, iosBrowser } from '../tour.js';
 import { settingsCard as learnCard, tickQuietly, gameOn, firstWord } from './learn.js';
@@ -170,7 +171,7 @@ const catName = id => t(([...expenseCats(), ...INCOME_CATEGORIES].find(c => c.id
 async function dailyReminder() {
   const at = $('#remind-at')?.value || '21:00';
   await setSetting('remindAt', at);
-  return dailyEvent({ at, title: t("Tally: add today's spending"), details: `${t('A minute is enough: snap the receipts or type what you spent.')} ${location.origin}${location.pathname}` });
+  return dailyEvent({ at, title: t("Tally: add today's spending"), details: `${t('A minute is enough: snap the receipts or type what you spent.')} ${isNative ? 'https://tallymy.github.io/' : `${location.origin}${location.pathname}`}` });
 }
 // ---- Settings search: the titles and labels on the page, in the language shown and in English ----------------------
 let findQ = '', hits = [];
@@ -274,8 +275,8 @@ export const settingsView = {
       <section class="card" id="s-help"><h2>${esc(t('Help and feedback'))}</h2>
         <div class="row2"><button class="btn ghost" data-act="tour">${esc(t('Take the tour'))}</button><button class="btn ghost" data-act="whats-new">${esc(t("What's new"))}</button></div>
         ${canInstall() ? `<button class="btn ghost wide" data-act="install">${ICON.download}${esc(t('Install Tally on this phone'))}</button>` : ''}
-        <button class="btn ghost wide" data-act="update-check">${esc(t('Check for updates'))}</button>
-        <label class="toggle"><span class="grow"><b>${esc(t('Ask before updating'))}</b><small>${esc(t('A new version waits until you tap Update now, so you can read its changes first.'))}</small></span><input type="checkbox" class="switch" data-input="ask-update"${settings().askUpdate ? ' checked' : ''}></label>
+        ${isNative ? '' : `<button class="btn ghost wide" data-act="update-check">${esc(t('Check for updates'))}</button>
+        <label class="toggle"><span class="grow"><b>${esc(t('Ask before updating'))}</b><small>${esc(t('A new version waits until you tap Update now, so you can read its changes first.'))}</small></span><input type="checkbox" class="switch" data-input="ask-update"${settings().askUpdate ? ' checked' : ''}></label>`}
         <p class="fine">${esc(t('Tell the developer about a bug or an idea. Sent: your message, the contact you add, and app and device details. Nothing about your money.'))}</p>
         <button class="btn ghost wide" data-act="feedback">${ICON.chat}${esc(t('Send feedback'))}</button>
         <p class="fine center">${esc(t('Or email the developer ({0}):', MAKER))} ${mailLink()}</p></section>

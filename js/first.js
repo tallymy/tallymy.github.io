@@ -9,6 +9,7 @@
   try { const th = (JSON.parse(localStorage.getItem('tally-look')) || {}).theme; if (th === 'light' || th === 'dark') document.documentElement.dataset.theme = th; } catch { /* none saved */ }
   try {
     if (location.search || location.hash) return;
+    if (globalThis.Capacitor?.isNativePlatform?.()) return;   // the Android app: no landing page inside it
     if (matchMedia('(display-mode: standalone)').matches || navigator.standalone) return;
     if (localStorage.getItem('tally-look') !== null) return;
     if (document.referrer && new URL(document.referrer).origin === location.origin) return;

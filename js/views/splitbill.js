@@ -5,16 +5,22 @@
 import { S, settings, setSetting, cat, putAll, uid, today as todayIso } from '../state.js';
 import { t, fmtDate } from '../i18n.js';
 import { esc, openSheet, closeSheet, toast } from '../ui.js';
-import { fmtRM, allocate, isFx } from '../engine.js';
+import { fmtRM, allocate, isFx, calcAmount } from '../engine.js';
 import { typedShift } from '../io.js';
 import { send, caption } from '../share.js';
 
 /** splitBill, and what each person had of each item: {owe: {id: sen}, parts: {id: [sen per item]}}, parts summing to owe. */
 export function splitShares(items, total, who, people) {
-  const extra = allocate(items.map(i => i.cents), total - items.reduce((s, i) => s + i.cents, 0));
+  // A line marked `extra` (tax & service) that nobody tapped isn't shared as a line: it's spread over the rest by size.
+  const live = items.map((it, n) => !it.extra || (who[n] || []).some(p => people.includes(p)));
+  const kept = items.filter((_, n) => live[n]);
+  const extra = allocate(kept.map(i => i.cents), total - kept.reduce((s, i) => s + i.cents, 0));
   const owe = Object.fromEntries(people.map(p => [p, 0])), parts = Object.fromEntries(people.map(p => [p, items.map(() => 0)]));
+  let k = -1;
   items.forEach((it, n) => {
-    const by = who[n]?.length ? who[n].filter(p => p in owe) : people, cost = it.cents + extra[n];
+    if (!live[n]) return;
+    k += 1;
+    const by = who[n]?.length ? who[n].filter(p => p in owe) : people, cost = it.cents + extra[k];
     if (!by.length) return;
     const each = Math.trunc(cost / by.length);
     // The odd sen of each item starts one person further along, so over a long receipt it isn't always the same one's.
@@ -32,8 +38,15 @@ export function original(tx) {
   const { split, owedTo, items, ...o } = tx;
   return { ...o, amount: split.total, ...(split.acc ? { accountId: split.acc } : {}), ...(split.items ? { items: split.items } : {}) };
 }
-/** The lines the sheet splits: the receipt's items, or the payment as one. */
-const linesOf = o => (o.items?.length ? o.items.map(i => ({ name: i.name || t(cat(i.category).name), cents: i.cents })) : [{ name: o.merchant || t(cat(o.category).name), cents: o.amount }]);
+/** The lines the sheet splits: the receipt's items plus a tax & service line, or the payment as one. */
+const linesOf = o => {
+  if (!o.items?.length) return [{ name: o.merchant || t(cat(o.category).name), cents: o.amount }];
+  const lines = o.items.map(i => ({ name: i.name || t(cat(i.category).name), cents: i.cents }));
+  const left = o.amount - lines.reduce((s, i) => s + i.cents, 0);
+  // ponytail: a negative difference (rounding down, a discount) has no line; it just spreads by size as before.
+  if (left > 0) lines.push({ name: t('Tax & service'), cents: left, extra: true });
+  return lines;
+};
 const OWING_NAME = { owedme: 'Owed to you', iowe: 'You owe' };
 /**
  * "Save my share" as one write for putAll ({accounts, tx, del}). The bill becomes my share: its amount, and my part of
@@ -41,23 +54,36 @@ const OWING_NAME = { owedme: 'Owed to you', iowe: 'You owe' };
  * transfer from the paying account to Owed to you, so that account's balance doesn't move. A friend paid: my share is
  * owed to them (the bill moves to You owe; the others settle with them). Split again: the old shares go first.
  */
-export function splitRows({ tx, people, who, paidBy = ME, shop = tx.merchant || '', accounts = S.accounts, txs = S.tx, today = todayIso(), now = Date.now() }) {
+export function splitRows({ tx, people, who, paidBy = ME, paid, shop = tx.merchant || '', accounts = S.accounts, txs = S.tx, today = todayIso(), now = Date.now() }) {
   const o = original(tx), { owe, parts } = splitShares(linesOf(o), o.amount, who, people), friends = people.filter(p => p !== ME);
+  // `paid` ({person: sen} summing to the bill): who put money down at the counter. Each person's debt is their share
+  // less what they put down. I'm short: my debt goes to the friend who put down the most over their share (several
+  // overpaid: they settle between themselves, like the other friends always did). I'm over: the short friends owe me.
+  const paidMap = paid || { [paidBy]: o.amount };
+  if (Object.values(paidMap).reduce((s, v) => s + v, 0) !== o.amount) throw new Error('paid must add up to the bill');
+  const net = p => (owe[p] || 0) - (paidMap[p] || 0), myNet = net(ME), friendPaid = myNet > 0;
+  const payer = friendPaid ? friends.reduce((a, b) => (net(b) < net(a) ? b : a)) : null;
   const made = [], acct = kind => accounts.find(a => a.kind === kind) || made.find(a => a.kind === kind)
     || made[made.push({ id: uid('a'), name: OWING_NAME[kind], kind, opening: 0, createdAt: now, updatedAt: now }) - 1];   // never `typed`: no balance to keep
   const mine = o.items?.length ? o.items.map(({ qty, unit, ...i }, n) => ({ ...i, cents: parts[ME][n] })).filter(i => i.cents) : [];
-  const { items, owedTo, split, ...base } = o, friendPaid = paidBy !== ME;
+  const { items, owedTo, split, ...base } = o;
   const bill = { ...base, amount: owe[ME], ...(mine.length ? { items: mine } : {}),
-    split: { total: o.amount, with: friends, who: who.map(w => w.map(p => (p === ME ? '' : p))), ...(items?.length ? { items } : {}), ...(friendPaid ? { acc: o.accountId } : {}) },
-    ...(friendPaid ? { accountId: acct('iowe').id, owedTo: paidBy } : {}) };
-  const shares = friendPaid ? [] : friends.filter(f => owe[f] > 0).map(f => ({ id: uid('t'), type: 'transfer', date: o.date, ...(o.time ? { time: o.time } : {}), amount: owe[f],
-    accountId: o.accountId, toAccountId: acct('owedme').id, category: 'other', merchant: `${f} · ${shop}`.slice(0, 80), owedBy: f, splitOf: o.id, source: 'quick', createdAt: now }));
+    split: { total: o.amount, with: friends, who: who.map(w => w.map(p => (p === ME ? '' : p))), ...(items?.length ? { items } : {}),
+      ...(paid ? { paid: Object.fromEntries(Object.entries(paidMap).filter(([, v]) => v > 0).map(([p, v]) => [p === ME ? '' : p, v])) } : {}),
+      ...(friendPaid ? { acc: o.accountId } : {}) },
+    ...(friendPaid ? { accountId: acct('iowe').id, owedTo: payer } : {}) };
+  const short = friends.map(f => Math.max(0, net(f))), take = friendPaid ? [] : allocate(short, -myNet);
+  const shares = friendPaid ? [] : friends.flatMap((f, j) => (take[j] > 0 ? [{ id: uid('t'), type: 'transfer', date: o.date, ...(o.time ? { time: o.time } : {}), amount: take[j],
+    accountId: o.accountId, toAccountId: acct('owedme').id, category: 'other', merchant: `${f} · ${shop}`.slice(0, 80), owedBy: f, splitOf: o.id, source: 'quick', createdAt: now }] : []));
+  // A friend covered the bill and I put some down at the counter: that much of my debt is already paid.
+  const down = friendPaid && paidMap[ME] > 0 ? [{ id: uid('t'), type: 'transfer', date: o.date, ...(o.time ? { time: o.time } : {}), amount: paidMap[ME],
+    accountId: o.accountId, toAccountId: acct('iowe').id, category: 'other', merchant: `${payer} · ${shop}`.slice(0, 80), repaidTo: payer, splitOf: o.id, source: 'quick', createdAt: now }] : [];
   // A balance typed today already holds the back-dated entries (state keepToday): an account's starting balance moves by
   // what this changes in it before that day, in the same write. Paid by me, it nets to nothing.
   const old = txs.filter(x => x.splitOf === tx.id), rest = txs.filter(x => x.id !== tx.id && x.splitOf !== tx.id), typed = accounts.filter(a => a.typed);
-  const was = typedShift(typed, rest, [tx, ...old], today), is = typedShift(typed, rest, [bill, ...shares], today);
+  const was = typedShift(typed, rest, [tx, ...old], today), is = typedShift(typed, rest, [bill, ...shares, ...down], today);
   const moved = typed.filter(a => (is[a.id] || 0) !== (was[a.id] || 0)).map(a => ({ ...a, opening: (a.opening || 0) + (is[a.id] || 0) - (was[a.id] || 0), updatedAt: now }));
-  return { accounts: [...made, ...moved], tx: [bill, ...shares], del: { tx: old.map(x => x.id) } };
+  return { accounts: [...made, ...moved], tx: [bill, ...shares, ...down], del: { tx: old.map(x => x.id) } };
 }
 /** splitRows, written all or nothing. */
 export const saveSplit = o => putAll({ ...splitRows(o), edit: true });
@@ -67,19 +93,36 @@ export function openSplit(tx) {
   // Split before: the same people, who had what and who paid, to change and save again.
   const people = sp ? [ME, ...sp.with] : [ME, ...(settings().friends || []).slice(0, 3)];
   const who = items.map((_, n) => (sp?.who?.[n] || []).map(p => (p === '' ? ME : p)).filter(p => people.includes(p)));
-  let current = people[1] || ME, paidBy = people.includes(tx.owedTo) ? tx.owedTo : ME;
+  let current = people[1] || ME;
+  // Who put money down at the counter: usually one person, the whole bill; more, each with an amount (split.paid).
+  let payers = sp?.paid ? Object.keys(sp.paid).map(p => (p === '' ? ME : p)).filter(p => people.includes(p)) : [people.includes(tx.owedTo) ? tx.owedTo : ME];
+  if (!payers.length) payers = [ME];
+  const paidAmt = {};
+  if (sp?.paid) for (const [p, v] of Object.entries(sp.paid)) paidAmt[p === '' ? ME : p] = v;
+  // One payer paid it all; with more, the first picks up what the others' typed amounts leave over.
+  const rebalance = () => {
+    if (payers.length === 1) { paidAmt[payers[0]] = o.amount; return; }
+    for (const p of payers) paidAmt[p] = paidAmt[p] || 0;
+    const left = o.amount - payers.slice(1).reduce((s, p) => s + paidAmt[p], 0);
+    if (left >= 0) paidAmt[payers[0]] = left;
+  };
+  rebalance();
+  const paidOf = p => (payers.length > 1 ? paidAmt[p] || 0 : p === payers[0] ? o.amount : 0);
   const name = p => (p === ME ? t('Me') : p);
   const chip = (p, on, data) => `<button type="button" class="chip${on ? ' on' : ''}" ${data}="${esc(p)}" aria-pressed="${on}">${esc(name(p))}</button>`;
   const body = () => {
-    const owe = splitBill(items, o.amount, who, people), others = o.amount - owe[ME];
+    const owe = splitBill(items, o.amount, who, people), paidSum = people.reduce((s, p) => s + paidOf(p), 0);
+    const myNet = owe[ME] - paidOf(ME), top = myNet > 0 ? people.filter(p => p !== ME).reduce((a, b) => (owe[b] - paidOf(b) < owe[a] - paidOf(a) ? b : a)) : null;
     return `<div class="chips" role="group" aria-label="${esc(t('Who'))}">${people.map(p => chip(p, p === current, 'data-p')).join('')}
       <input id="sp-new" class="chip sp-new" maxlength="20" placeholder="${esc(t('+ Name'))}" aria-label="${esc(t('Add a person'))}" autocomplete="off"></div>
-      <p class="fine">${esc(t('Tap a person, then what they had. Anything not tapped is shared by everyone.'))}</p>
-      ${people.length > 1 ? `<div class="sp-paid" role="group" aria-label="${esc(t('Paid by'))}"><span class="fine">${esc(t('Paid by'))}</span><div class="chips">${people.map(p => chip(p, p === paidBy, 'data-by')).join('')}</div></div>` : ''}
+      <p class="fine">${esc(t('Tap a person, then what they had; tap the same thing as more than one person to share it. Anything not tapped is shared by everyone. Tap a name again to take them off.'))}</p>
+      ${people.length > 1 ? `<div class="sp-paid" role="group" aria-label="${esc(t('Paid by'))}"><span class="fine">${esc(t('Paid by'))}</span><div class="chips">${people.map(p => chip(p, payers.includes(p), 'data-by')).join('')}</div></div>
+      ${payers.length > 1 ? `<div class="grid2 keep2">${payers.map(p => `<label class="field"><span>${esc(t('{0} paid (RM)', name(p)))}</span><input class="sp-amt" data-pa="${esc(p)}" inputmode="decimal" autocomplete="off" value="${((paidAmt[p] || 0) / 100).toFixed(2)}"></label>`).join('')}</div>
+      ${paidSum !== o.amount ? `<p class="err" role="alert">${esc(t('What everyone paid must add up to {0}.', fmtRM(o.amount)))}</p>` : ''}` : ''}` : ''}
       <ul class="relief sp-items">${items.map((it, n) => `<li><button type="button" class="rbtn${who[n].includes(current) ? ' on' : ''}" data-i="${n}" aria-pressed="${who[n].includes(current)}"><span class="rowb"><b>${esc(it.name)}</b><span class="num">${esc(fmtRM(it.cents))}</span></span>
-        <small>${esc(who[n].length ? who[n].map(name).join(', ') : t('Everyone'))}</small></button></li>`).join('')}</ul>
-      <ul class="list sp-sum">${people.map(p => `<li class="rowb"><span>${esc(name(p))}${p === paidBy && people.length > 1 ? ` <small class="pill">${esc(t('paid'))}</small>` : ''}</span><b class="num">${esc(fmtRM(owe[p]))}</b></li>`).join('')}
-        ${people.length > 1 ? `<li class="rowb sp-owed"><span>${esc(paidBy === ME ? t('Owed to you') : t('You owe {0}', paidBy))}</span><b class="num">${esc(fmtRM(paidBy === ME ? others : owe[ME]))}</b></li>` : ''}</ul>`;
+        <small>${esc(who[n].length ? who[n].map(name).join(', ') : it.extra ? t('With the food') : t('Everyone'))}</small></button></li>`).join('')}</ul>
+      <ul class="list sp-sum">${people.map(p => `<li class="rowb"><span>${esc(name(p))}${payers.includes(p) && people.length > 1 ? ` <small class="pill">${esc(t('paid'))}</small>` : ''}</span><b class="num">${esc(fmtRM(owe[p]))}</b></li>`).join('')}
+        ${people.length > 1 && myNet !== 0 ? `<li class="rowb sp-owed"><span>${esc(myNet < 0 ? t('Owed to you') : t('You owe {0}', top))}</span><b class="num">${esc(fmtRM(Math.abs(myNet)))}</b></li>` : ''}</ul>`;
   };
   // A share in another currency would land in the RM accounts of what is owed: that one is shared, not saved.
   // ponytail: RM only; convert at the account's rate if people split bills abroad.
@@ -96,19 +139,44 @@ export function openSplit(tx) {
     redraw(); el.querySelector('#sp-new')?.focus();
   };
   el.addEventListener('keydown', e => { if (e.target.id === 'sp-new' && e.key === 'Enter') { e.preventDefault(); addPerson(e.target.value); } });
-  el.addEventListener('change', e => { if (e.target.id === 'sp-new') addPerson(e.target.value); });
+  el.addEventListener('change', e => {
+    if (e.target.id === 'sp-new') return addPerson(e.target.value);
+    if (e.target.classList.contains('sp-amt')) {
+      const p = e.target.dataset.pa, v = calcAmount(e.target.value);
+      paidAmt[p] = Math.max(0, Math.min(o.amount, v || 0));
+      if (p !== payers[0]) rebalance();   // typing a friend's amount: mine picks up the rest
+      redraw();
+    }
+  });
   el.addEventListener('click', async e => {
     const pb = e.target.closest('[data-p]'), by = e.target.closest('[data-by]'), ib = e.target.closest('[data-i]'), xb = e.target.closest('[data-x]'), x = xb?.dataset.x;
-    if (pb) { current = pb.dataset.p; redraw(); return; }
-    if (by) { paidBy = by.dataset.by; redraw(); return; }
+    if (pb) {
+      const p = pb.dataset.p;
+      if (p === current && p !== ME) {   // tapping the picked person again takes them off the bill
+        people.splice(people.indexOf(p), 1);
+        who.forEach(w => { const k = w.indexOf(p); if (k >= 0) w.splice(k, 1); });
+        payers = payers.filter(q => q !== p); delete paidAmt[p];
+        if (!payers.length) payers = [ME];
+        rebalance(); current = ME;
+      } else current = p;
+      redraw(); return;
+    }
+    if (by) {
+      const p = by.dataset.by, k = payers.indexOf(p);
+      if (k < 0) payers.push(p); else if (payers.length > 1) payers.splice(k, 1);
+      rebalance(); redraw(); return;
+    }
     if (ib) { const w = who[+ib.dataset.i], k = w.indexOf(current); if (k < 0) w.push(current); else w.splice(k, 1); redraw(); return; }
     if (!x) return;
-    const owe = splitBill(items, o.amount, who, people);
+    const owe = splitBill(items, o.amount, who, people), myNet = owe[ME] - paidOf(ME);
     if (x === 'save') {
+      const paid = payers.length > 1 ? Object.fromEntries(payers.map(p => [p, paidAmt[p] || 0])) : null;
+      if (paid && Object.values(paid).reduce((s, v) => s + v, 0) !== o.amount) return toast(t('What everyone paid must add up to {0}.', fmtRM(o.amount)), { k: 'bad' });
       xb.disabled = true;
-      try { await saveSplit({ tx: S.tx.find(y => y.id === tx.id) || tx, people, who, paidBy }); } catch (err) { console.error(err); xb.disabled = false; return toast(t('Could not save. Your phone may be out of space.'), { k: 'bad' }); }
+      try { await saveSplit({ tx: S.tx.find(y => y.id === tx.id) || tx, people, who, paidBy: payers[0], ...(paid ? { paid } : {}) }); } catch (err) { console.error(err); xb.disabled = false; return toast(t('Could not save. Your phone may be out of space.'), { k: 'bad' }); }
       closeSheet(); (await import('../app.js')).render();
-      toast(paidBy === ME ? t('Saved. Your share: {0}. Owed to you: {1}', fmtRM(owe[ME]), fmtRM(o.amount - owe[ME])) : t('Saved. You owe {0}: {1}', paidBy, fmtRM(owe[ME])), { icon: 'check' });
+      const top = myNet > 0 ? people.filter(p => p !== ME).reduce((a, b) => (owe[b] - paidOf(b) < owe[a] - paidOf(a) ? b : a)) : null;
+      toast(myNet > 0 ? t('Saved. You owe {0}: {1}', top, fmtRM(myNet)) : t('Saved. Your share: {0}. Owed to you: {1}', fmtRM(owe[ME]), fmtRM(-myNet)), { icon: 'check' });
     }
     if (x === 'text') {
       const text = [`${o.merchant || t('Bill')} · ${fmtDate(o.date)} · ${fmtRM(o.amount)}`, ...people.map(p => `${name(p)}: ${fmtRM(owe[p])}`), t('Split with Tally · tallymy.github.io')].join('\n');
