@@ -7,10 +7,7 @@ import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { webcrypto } from 'node:crypto';
 const source = await readFile(new URL('../js/native.js', import.meta.url), 'utf8');
-const java = await readFile(new URL('../TallyNativePlugin.java', import.meta.url), 'utf8').catch(error => {
-  if (error.code !== 'ENOENT') throw error;
-  return readFile(process.env.TALLY_ANDROID_ROOT ? join(process.env.TALLY_ANDROID_ROOT, 'android/app/src/main/java/io/github/tallymy/TallyNativePlugin.java') : new URL('../../tally-android/android/app/src/main/java/io/github/tallymy/TallyNativePlugin.java', import.meta.url), 'utf8');
-});
+const java = await readFile(process.env.TALLY_ANDROID_ROOT ? join(process.env.TALLY_ANDROID_ROOT, 'android/app/src/main/java/io/github/tallymy/TallyNativePlugin.java') : new URL('../android-wrapper/android/app/src/main/java/io/github/tallymy/TallyNativePlugin.java', import.meta.url), 'utf8');
 
 function harness({ batches = [], fetcher, share = async () => {}, save = async () => ({ cancelled: false }), write = async () => {} } = {}) {
   const releases = [], deleted = [], errors = [], holds = [], outputReleases = [], reads = [], callbacks = new Map();

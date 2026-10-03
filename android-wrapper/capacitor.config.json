@@ -1,0 +1,17 @@
+{
+  "appId": "io.github.tallymy",
+  "appName": "Tally",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https",
+    "cleartext": false
+  },
+  "android": {
+    "backgroundColor": "#0F172A"
+  },
+  "plugins": {
+    "SystemBars": {
+      "insetsHandling": "css"
+    }
+  }
+}

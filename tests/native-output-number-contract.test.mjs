@@ -3,12 +3,13 @@ import assert from 'node:assert/strict';
 import { readFile, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 
 // This deployment regression uses Capacitor's installed getter implementation,
 // rather than a mock that silently coerces Integer into Long. Override the root
 // when the Android project is deployed elsewhere.
-const androidRoot = process.env.TALLY_ANDROID_ROOT || 'D:/tally-android';
+const androidRoot = process.env.TALLY_ANDROID_ROOT || fileURLToPath(new URL('../android-wrapper/', import.meta.url));
 const plugin = await readFile(join(androidRoot,'android/app/src/main/java/io/github/tallymy/TallyNativePlugin.java'), 'utf8');
 const capacitorCall = await readFile(join(androidRoot,
   'node_modules/@capacitor/android/capacitor/src/main/java/com/getcapacitor/PluginCall.java'), 'utf8');
