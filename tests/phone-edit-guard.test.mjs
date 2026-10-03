@@ -34,7 +34,8 @@ async function seed() {
 }
 function harness(accounts = [account], txs = [old]) {
   const S = { accounts: structuredClone(accounts), tx: structuredClone(txs), kv: { settings: {} } };
-  const c = vm.createContext({ S, db, structuredClone, settings: () => S.kv.settings, today: () => '2026-10-03', pad2: n => String(n).padStart(2, '0'),
+  // Reminder delivery has separate bridge tests; this fixture isolates atomic phone edits.
+  const c = vm.createContext({ S, db, structuredClone, syncReminderDay: async () => {}, settings: () => S.kv.settings, today: () => '2026-10-03', pad2: n => String(n).padStart(2, '0'),
     isFx: a => !!a?.currency && a.currency !== 'MYR', stamp: row => ({ ...row, updatedAt: 12345 }), kvRows: kv => Object.entries(kv).map(([key, value]) => ({ key, value })),
     bookGeneration: () => S.kv.bookGeneration, bookGuard: generation => ({ kv: [{ id: 'bookGeneration', value: generation == null ? undefined : { key: 'bookGeneration', value: generation } }] }),
     load: async () => { S.tx = await db.all('tx'); S.accounts = await db.all('accounts'); }, leftJoint: () => [], markGone: async () => {},

@@ -11,7 +11,8 @@ import { onboarding, registerSW } from './tour.js';
 import { startScan } from './camera.js';
 import { applyLook, applySavedLook } from './colorpicker.js';
 import { on } from './features.js';
-import { sharedFiles, onShared } from './native.js';
+import { sharedFiles, onShared, isNative } from './native.js';
+import { syncReminderDay } from './state.js';
 window.addEventListener('tally:scan-shortcut', () => {
   if (!document.getElementById('view')?.children.length || locked() || document.querySelector('.lock, .scrim:not(.out)')) return;
   ACT.scan();
@@ -19,7 +20,7 @@ window.addEventListener('tally:scan-shortcut', () => {
 
 applySavedLook();   // theme and accent before anything is drawn (the database copy is applied on every render)
 
-export const APP_VERSION = '1.13.1';
+export const APP_VERSION = '1.13.2';
 export const MAKER = 'fir1412', CONTACT = 'fir1412dev@gmail.com';   // the developer, and the data user for feedback (privacy pages)
 // Checking a receipt and Settings (with Welcome and imports) load the first time they are needed, not before Home
 // shows. sw.js still caches them for offline use.
@@ -201,6 +202,7 @@ export const refresh = () => { if (!sheetOpen()) render(); };
     if (OLD_HOME && !S.accounts.length && !S.tx.length && !settings().lock) { await wipeSite(); return location.replace(NEW_HOME); }   // nothing here to move: go to the new address
     await setLang(settings().lang || pickLang(navigator.languages || [navigator.language]));
     document.documentElement.style.fontSize = `${settings().textSize || 100}%`;
+    await syncReminderDay();   // selected/default language is now available
     await gate();   // app lock: nothing is shown before the PIN
     if (settings().lock?.enc) { await load(); sealPhotos().catch(() => {}); }   // encrypted: the data could only be read once the PIN unlocked its key
     await repairCatNames().catch(() => {});   // "&#x1f35c; Food" from an older import: folded into Food
@@ -219,8 +221,9 @@ export const refresh = () => { if (!sheetOpen()) render(); };
     if (resumed === 'waiting') toast(t('A receipt is waiting for the reader. Open Scan when you are on Wi-Fi.'));
     else if (resumed) { history.replaceState(null, '', '#/review'); toast(resumed === 'items' ? t('Picked up the items you were adding') : t('Picked up the receipt you were checking')); }
     await money.postBills().catch(console.error);   // bills that add themselves, up to today
-    watch(async () => { if (await money.postBills().catch(() => 0)) refresh(); });
+    watch(async () => { if (await money.postBills().catch(() => 0)) refresh(); await syncReminderDay(); });
     if (S.accounts.length) persistStorage().then(() => route() === 'settings' && refresh());
+    if (isNative) setInterval(() => { if (document.visibilityState === 'visible') syncReminderDay().catch(() => {}); }, 60_000);   // midnight/clock changes while open
     entering(); render();   // opening the app plays the same entrance as a screen change (the month ring fills)
     if (!resumed) onboarding();
     flushFeedback().catch(() => {});

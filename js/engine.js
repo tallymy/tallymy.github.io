@@ -360,6 +360,24 @@ export function openShares(txs) {
   });
   return { owedMe: open(me), iOwe: open(them) };
 }
+/** Display-only progress per person, using openShares as the remaining-balance authority.
+ * Settled people require a surviving debt row; orphan repayment rows never create history.
+ * Repayment accounts are transfer legs, including a debt cleared as a treat. */
+export function shareProgress(txs) {
+  const open = openShares(txs), groups = { owedMe: new Map(), iOwe: new Map() }, outstanding = Object.fromEntries(Object.entries(open).map(([kind, list]) => [kind, new Map(list.map(f => [f.name, f]))]));
+  const get = (group, name) => { const m = groups[group]; if (!m.has(name)) m.set(name, { name, total: 0, repayments: [] }); return m.get(name); };
+  for (const x of txs) {
+    if (x.type === 'transfer' && x.owedBy) get('owedMe', x.owedBy).total += x.amount;
+    else if (x.type === 'transfer' && x.repaidBy) get('owedMe', x.repaidBy).repayments.push(x);
+    else if (x.type === 'expense' && x.owedTo) get('iOwe', x.owedTo).total += x.amount;
+    else if (x.type === 'transfer' && x.repaidTo) get('iOwe', x.repaidTo).repayments.push(x);
+  }
+  return Object.fromEntries(Object.entries(groups).map(([group, people]) => [group, [...people.values()].filter(f => f.total > 0).map(f => {
+    const remaining = outstanding[group].get(f.name), sen = remaining?.sen || 0;
+    return { ...remaining, name: f.name, sen, total: f.total, status: !sen ? 'settled' : f.total > sen ? 'partial' : 'unpaid',
+      repaymentAccounts: [...new Set(f.repayments.map(x => group === 'owedMe' ? x.toAccountId : x.accountId).filter(Boolean))] };
+  })]));
+}
 /**
  * Deleting split-bill rows (`goneIds`: a bill and its friends' shares): paybacks with those friends that would then
  * settle more than is still owed no longer settle anything. → {drop: [tx], trim: [tx with the smaller amount]},

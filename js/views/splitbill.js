@@ -238,7 +238,7 @@ function picture(tx, items, who, people, owe, name) {
 /** A repayment, including an optional treat, as a single atomic write. Values are integer sen. */
 export function repayRows({ kind, name, amount, total, boxId, accountId, date, treat = false, accounts = S.accounts, txs = S.tx, today = todayIso(), now = Date.now(), note = t('My treat') }) {
   if (!['owedme', 'iowe'].includes(kind) || !Number.isSafeInteger(total) || total <= 0 || !Number.isSafeInteger(amount) || amount < 0 || amount > total || (!amount && !(treat && kind === 'owedme')) || (treat && kind !== 'owedme') || !validIso(date) || date > today) throw new Error('Invalid repayment');
-  if (!accounts.some(a => a.id === boxId && a.kind === kind) || !accounts.some(a => a.id === accountId && !['owedme', 'iowe'].includes(a.kind))) throw new Error('Invalid repayment account');
+  if (!accounts.some(a => a.id === boxId && a.kind === kind && !isFx(a)) || !accounts.some(a => a.id === accountId && !['owedme', 'iowe'].includes(a.kind) && !isFx(a))) throw new Error('Invalid repayment account');
   const back = kind === 'owedme', tx = [];
   const transfer = value => ({ id: uid('t'), type: 'transfer', date, amount: value, accountId: back ? boxId : accountId, toAccountId: back ? accountId : boxId, category: 'other', merchant: name, [back ? 'repaidBy' : 'repaidTo']: name, source: 'quick', createdAt: now });
   if (amount) tx.push(transfer(amount));

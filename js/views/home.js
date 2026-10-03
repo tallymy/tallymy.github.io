@@ -3,7 +3,7 @@ import { S, today, nowLocal, nowTime, settings, setKv, setSetting, cat, booked, 
 import { saveRepayment, repaymentBase } from './splitbill.js';
 import { t, fmtDate, fmtMonth, monShort, cycleShort, getLang } from '../i18n.js';
 import { esc, ICON, MASK, balHidden, eyeBtn, lineChart, pairBars, donut, openSheet, toast, countUp, replay, landing, $, confirmSheet, closeSheet, landed } from '../ui.js';
-import { firstSpend, fmtRM, balances, monthOf, monthSpend, monthSpends, monthIncomes, addMonths, pace, cashFlow, balanceTrend, insights, habits, dueNudge, daysBetween, itemKey, cycleKey, cycleSpan, billStatus, newest, fmtAcct, offTotal, isFx, rateOf, belowSince, CATEGORIES, affordCheck, topCats, calcAmount, recurringCandidates, owing, openShares, validIso, affordMoney } from '../engine.js';
+import { firstSpend, fmtRM, balances, monthOf, monthSpend, monthSpends, monthIncomes, addMonths, pace, cashFlow, balanceTrend, insights, habits, dueNudge, daysBetween, itemKey, cycleKey, cycleSpan, billStatus, newest, fmtAcct, offTotal, isFx, rateOf, belowSince, CATEGORIES, affordCheck, topCats, calcAmount, recurringCandidates, owing, openShares, shareProgress, validIso, affordMoney } from '../engine.js';
 import { habitEvent, ics, googleUrl, safeId } from '../calendar.js';
 import { download, okMs } from '../io.js';
 import { render, go } from '../app.js';
@@ -321,12 +321,20 @@ const dotFor = c => `<span class="dot" style="background:${esc(CATEGORIES.find(x
 const firstScan = () => `<section class="card firstscan"><div class="rowb"><h2>${esc(t('Scan your first receipt'))}</h2><button class="icon-btn" data-act="dismiss" data-id="first-scan" aria-label="${esc(t('Dismiss'))}">${ICON.x}</button></div>
   ${demoCard()}<p class="fine">${esc(t('Receipts are read on this phone and split into categories automatically.'))}</p>
   <div class="row2"><button class="btn" data-act="scan">${ICON.camera}${esc(t('Take a photo'))}</button><button class="btn ghost" data-act="scan-pick">${ICON.image}${esc(t('From gallery'))}</button></div></section>`;
-/** Split bills still open, per friend (engine openShares): what they owe you, what you owe them. Hidden balance: masked. */
+const repaymentStatus = f => t(f.status === 'settled' ? 'Settled' : f.status === 'partial' ? 'Part paid' : 'Unpaid');
+/** Person-level debt progress; settled history is collapsed and hidden amounts stay masked. */
 function oweCards(hide) {
-  const { owedMe, iOwe } = cached(openShares, S.tx);
-  const card = (title, list, act, label) => (list.length ? `<section class="card owe"><h2>${esc(title)}</h2><ul class="list">${list.map(f => `<li class="rowb"><span class="grow">${esc(f.name)}</span>
-    <b class="num">${esc(hide ? MASK : fmtRM(f.sen))}</b><button class="btn small ghost" data-act="${act}" data-n="${esc(f.name)}">${esc(label)}</button></li>`).join('')}</ul></section>` : '');
-  return card(t('Owed to you'), owedMe, 'owe-back', t('Paid back')) + card(t('You owe'), iOwe, 'owe-pay', t('Pay back'));
+  const { owedMe, iOwe } = cached(shareProgress, S.tx);
+  const card = (title, list, act, label) => {
+    if (!list.length) return '';
+    const row = (f, settled = false) => `<li class="rowb"><span class="grow"><b>${esc(f.name)}</b><small>${esc(repaymentStatus(f))}${!settled ? ' · ' + esc(t('{0} remaining', hide ? MASK : fmtRM(f.sen))) : ''}</small>
+      ${f.repaymentAccounts.length ? `<small>${esc(t('Repayment account: {0}', f.repaymentAccounts.map(accName).join(', ')))}</small>` : ''}</span>
+      ${!settled ? `<button class="btn small ghost" data-act="${act}" data-n="${esc(f.name)}">${esc(label)}</button>` : ''}</li>`;
+    const pending = list.filter(f => f.status !== 'settled'), settled = list.filter(f => f.status === 'settled');
+    return `<section class="card owe"><h2>${esc(title)}</h2>${pending.length ? `<ul class="list">${pending.map(f => row(f)).join('')}</ul>` : ''}
+      ${settled.length ? `<details><summary>${esc(t('Settled ({0})', settled.length))}</summary><ul class="list">${settled.map(f => row(f, true)).join('')}</ul></details>` : ''}</section>`;
+  };
+  return card(t('Owed to you'), owedMe, 'owe-back', t('Record repayment')) + card(t('You owe'), iOwe, 'owe-pay', t('Record repayment'));
 }
 /** Paid back (a friend's share came in) or Pay back (mine went to them): a transfer out of Owed to you or into You owe,
  *  all of it or part. Paid back lands by default where their oldest open share was paid from. */
@@ -334,8 +342,10 @@ function repaySheet(kind, name) {
   const back = kind === 'owedme', f = openShares(S.tx)[back ? 'owedMe' : 'iOwe'].find(x => x.name === name), box = S.accounts.find(a => a.kind === kind);
   if (!f || !box) return;
   const guard = { tx: repaymentBase(kind, name), generation: bookGeneration() };
-  const accts = S.accounts.filter(a => !owing(a)), pick = back && accts.some(a => a.id === f.from) ? f.from : defaultAccount('quick'), tdy = today();
+  const accts = S.accounts.filter(a => !owing(a) && !isFx(a)), suggested = defaultAccount('quick', { currency: 'MYR' }), pick = back && accts.some(a => a.id === f.from) ? f.from : accts.some(a => a.id === suggested) ? suggested : accts[0]?.id, tdy = today();
+  if (!accts.length) { toast(t('Add an RM account in Settings to record this repayment.'), { k: 'bad' }); return; }
   const el = openSheet(`<h2 class="sh-title">${esc(back ? t('{0} paid you back', name) : t('Pay {0} back', name))}</h2>
+    <p class="sh-body">${esc(t('{0} remaining', balHidden() ? MASK : fmtRM(f.sen)))}</p>
     <label class="field amount"><span>${esc(t('Amount (RM)'))}</span><input id="rp-amt" inputmode="decimal" autocomplete="off" aria-describedby="rp-err" value="${(f.sen / 100).toFixed(2)}"></label>
     <div class="grid2 keep2"><label class="field"><span>${esc(back ? t('Into account') : t('From'))}</span><select id="rp-acc">${accts.map(a => `<option value="${esc(a.id)}"${a.id === pick ? ' selected' : ''}>${esc(accName(a.id))}</option>`).join('')}</select></label>
     <label class="field"><span>${esc(t('Date'))}</span><input id="rp-date" type="date" min="1990-01-01" max="${esc(tdy)}" value="${esc(tdy)}"></label></div>
@@ -358,7 +368,8 @@ function repaySheet(kind, name) {
       return err(error?.code === 'STALE' ? t('The entry changed on your phone. Refresh and try again.') + ' ' + t('Close this form and reopen the entry before saving.') : t('Could not save. Your phone may be out of space.'));
     }
     const x = rows.tx[0];
-    closeSheet(); if (x) landed(x.id); render(); toast(t('Saved'), { icon: 'check' });
+    const remaining = openShares(S.tx)[back ? 'owedMe' : 'iOwe'].find(person => person.name === name)?.sen || 0;
+    closeSheet(); if (x) landed(x.id); render(); toast(remaining ? t('Saved. {0} remaining.', balHidden() ? MASK : fmtRM(remaining)) : t('Saved. Settled.'), { icon: 'check' });
   });
 }
 let onScreen = null, drawn = null;   // the totals Home showed last, and the ones just drawn: a save counts from one to the other

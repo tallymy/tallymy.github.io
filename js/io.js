@@ -980,6 +980,7 @@ export function readBackup(text) {
 }
 /** Settings a backup carries, each checked: how Tally counts and looks, and your name. Never the app PIN, import memory or first-run flags. */
 const SETTINGS = {
+  quickAccount: v => okId(v),
   monthStart: v => Number.isInteger(v) && ((v >= 1 && v <= 28) || v === -1 || v === -2), weekStart: v => v === 0 || v === 1, lang: v => ['en', 'ms', 'zh', 'zh-Hant', 'ja', 'ta'].includes(v),
   textSize: v => [100, 115, 130].includes(v), theme: v => ['light', 'dark'].includes(v), accent: v => /^#[0-9a-f]{6}$/i.test(v),
   photoKeep: v => [0, 30, 90, 365].includes(v),   // days receipt photos are kept (0: always)

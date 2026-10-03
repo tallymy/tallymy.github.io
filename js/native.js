@@ -139,3 +139,29 @@ if (isNative) {
   const open = window.open.bind(window);
   window.open = (url, ...rest) => { const out = url && external(String(url)); if (out) { openExternal(out); return null; } return open(url, ...rest); };
 }
+
+// Optional Android-local logging reminder. No platform/browser fallback prompt.
+let reminderQueue = Promise.resolve();
+const reminderBridge = () => isNative && plugin('TallyReminders');
+const queueReminder = fn => { const task = reminderQueue.then(fn); reminderQueue = task.catch(() => {}); return task; };
+export function reminderStatus() {
+  const p = reminderBridge();
+  return !p ? Promise.resolve({ supported: false }) : queueReminder(() => p.reminderStatus()).catch(() => ({ supported: false }));
+}
+export function configureReminder({ enabled, time }) {
+  const p = reminderBridge();
+  return !p ? Promise.resolve({ supported: false }) : queueReminder(() => p.configureReminder({ enabled: !!enabled, time }));
+}
+/** Only a day key and booleans cross the bridge; locked books retain their last known marker. */
+export function mirrorReminderDay({ day, logged, eligible, lang }) {
+  const p = reminderBridge();
+  if (!p) return Promise.resolve({ supported: false });
+  return queueReminder(async () => {
+    try { return await p.mirrorReminderDay({ day, logged: !!logged, eligible: !!eligible, lang }); }
+    catch (error) {
+      // A stale/failed mirror must not silently leave a potentially false reminder active.
+      await p.configureReminder({ enabled: false, time: '21:00' }).catch(() => {});
+      return { supported: true, error: true };
+    }
+  });
+}

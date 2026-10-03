@@ -153,6 +153,8 @@ h3 { font-size: var(--fs-sm); margin: var(--sp-2) 0 0; }
 .flip svg, svg.flip { transform: scaleX(-1); }
 .link { background: none; border: 0; color: var(--accent); cursor: pointer; padding: 0; display: inline-flex; align-items: center; gap: var(--sp-2); min-height: 44px; text-align: left; }
 .row2 { display: flex; gap: var(--sp-3); } .row2 > * { flex: 1; min-width: 0; }
+#backup .row2 { flex-wrap: wrap; }
+#backup .row2 > .btn { flex-basis: 12rem; }
 .sticky { position: sticky; bottom: calc(80px + env(safe-area-inset-bottom, 0px)); background: var(--bg); padding: var(--sp-2) 0; }
 .filebtn { position: relative; }
 
@@ -928,6 +930,9 @@ body.calc-on :is(input, select) { scroll-margin-bottom: 72px; }   /* the calcula
 .sp-note { display: flex; gap: var(--sp-2); align-items: center; margin: 0; } .sp-note svg { width: 18px; height: 18px; flex: none; }
 .card.owe .list > li:last-child { border-bottom: 0; }
 .card.owe .grow { overflow-wrap: anywhere; }   /* a long name next to a wide button wraps, never runs under the amount */
+.card.owe .list > li.rowb { flex-wrap: wrap; }
+.card.owe .grow { flex-basis: 12em; }
+.card.owe .grow b, .card.owe .grow small { overflow: visible; white-space: normal; }
 /* Chinese (Traditional) and Japanese read in their own system fonts first (the same characters are drawn differently). */
 :lang(zh-Hant) { --font: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif; }
 :lang(ja) { --font: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans JP", "Hiragino Sans", "Yu Gothic UI", "Meiryo", sans-serif; }

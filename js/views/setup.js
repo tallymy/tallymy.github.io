@@ -9,7 +9,9 @@ import { detectPreset } from '../presets.js';
 import { parseStatement, statementToTx, linesFromItems, detectProvider, guessKind, PAGE_BREAK, isWallet } from '../statement.js';
 import { render, go, APP_VERSION, MAKER, CONTACT } from '../app.js';
 import { openFeedback } from '../feedback.js';
-import { isNative } from '../native.js';
+import { bookGeneration } from '../state.js';
+import { isNative, reminderStatus, configureReminder } from '../native.js';
+import { syncReminderDay } from '../state.js';
 import { dailyEvent, ics, googleUrl } from '../calendar.js';
 import { showTour, showWhatsNew, siteUrl, afterSetup, markSeen, canInstall, promptInstall, checkForUpdates, holdUpdates, iosBrowser } from '../tour.js';
 import { settingsCard as learnCard, tickQuietly, gameOn, firstWord } from './learn.js';
@@ -166,7 +168,7 @@ export const welcomeView = {
       <p class="legal">${legalLinks()}</p>
       <ul class="points">
         <li>${ICON.receipt}<span>${esc(t('Receipts are read on this phone and split into categories automatically.'))}</span></li>
-        <li>${ICON.lock}<span>${esc(t('Tally never reads your SMS and never asks for your bank login. The camera is the only permission it asks for.'))}</span></li>
+        <li>${ICON.lock}<span>${esc(isNative ? t('Tally never reads your SMS and never asks for your bank login. It asks for camera permission to scan and notification permission only if you enable reminders.') : t('Tally never reads your SMS and never asks for your bank login. The camera is the only permission it asks for.'))}</span></li>
         <li>${ICON.wallet}<span>${esc(t('No account, no ads. Your entries stay on this phone. They leave it only when you export, back up, share, connect your own computer, or add a reminder to Google Calendar.'))} <button class="link" data-act="storage-info">${esc(t('How your data is kept'))}</button> · <button class="link" data-act="net-check">${esc(t('Check it yourself'))}</button></span></li>
         <li>${ICON.upload}<span>${esc(t('Already tracking in another app or a spreadsheet? Bring your history with you.'))}</span></li>
         <li>${ICON.download}<span>${esc(t('Your data is never locked in: take it to Excel, Google Sheets or another money app any time.'))}</span></li>
@@ -236,10 +238,34 @@ function showFound(x) {
   if (to.matches('h2, .rowb, .lookrow')) to.tabIndex = -1;
   to.focus({ preventScroll: true });
 }
+
+async function updateLocalReminder(result) {
+  const box = $('#local-remind-status'); if (!box) return;
+  result ||= await reminderStatus(); if (!box.isConnected) return;
+  const time = $('#local-remind-at'), enable = $('[data-act="local-remind-enable"]'), disable = $('[data-act="local-remind-disable"]');
+  const supported = result.supported === true, sample = !!settings().sample;
+  time.disabled = !supported || sample; if (supported) time.value = result.time || '21:00';
+  enable.disabled = !supported || sample; disable.disabled = !supported || !(result.configured || result.enabled);
+  enable.textContent = t(result.enabled ? 'Save reminder time' : 'Enable reminder');
+  box.textContent = t(!supported ? 'Local reminders are unavailable in this app version.' : sample ? 'Reminders pause while using sample data.' : result.permission === 'denied' ? 'Notifications are off. Enable them in Android settings, then try again.' : result.enabled ? 'Reminder on. It skips days with a logged expense.' : 'Reminder off.');
+}
+async function changeLocalReminder(enabled) {
+  const time = $('#local-remind-at')?.value || '21:00';
+  if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(time)) return;
+  const buttons = [...$$('[data-act="local-remind-enable"], [data-act="local-remind-disable"]')]; buttons.forEach(b => b.disabled = true);
+  try {
+    await syncReminderDay();
+    const result = await configureReminder({ enabled, time });
+    await updateLocalReminder(result);
+    if (enabled && result.supported && !result.enabled) toast(t('Reminder not enabled. Notification permission is needed.'), { k: 'warn' });
+  } catch { await updateLocalReminder(); toast(t('Could not save the reminder. Try again.'), { k: 'bad' }); }
+}
+
 export const settingsView = {
   title: 'Settings',
   async after() {   // the reader card says so when the reader is already on this phone
     if (isNative) {
+      await updateLocalReminder();
       const control = $('#scan-shortcut');
       try { const result = await Capacitor.Plugins.TallyNative.scanShortcut({}); if (control?.isConnected) control.value = result.button; } catch { if (control) control.disabled = true; }
     }
@@ -273,20 +299,28 @@ export const settingsView = {
         <label class="field"><span>${esc(t('My month starts on day'))}</span><select data-input="month-start">${[...Array.from({ length: 28 }, (_, i) => [i + 1, String(i + 1)]), [-2, t('Second-last day')], [-1, t('Last day')]].map(([v, l]) => `<option value="${v}"${startDay() === v ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
         <p class="fine">${esc(t('Paid on the 25th? Start your month on payday. Home, Budgets and Insights follow it.'))} ${esc(t('This month: {0}', fmtMonth(thisMonth(), startDay())))}</p></section>
       <section class="card" id="s-accounts"><h2>${esc(t('Accounts'))}</h2><ul class="list">${S.accounts.filter(a => !owing(a)).map(a => `<li><button class="txrow" data-act="acc-edit" data-id="${esc(a.id)}"><span class="grow"><b>${esc(a.name)}</b><small>${esc(accSub(a, bal))}</small></span><span class="fine">${esc(t('Edit'))}</span></button></li>`).join('')}</ul>
-        <button class="btn ghost wide" data-act="acc-edit">${ICON.plus}${esc(t('Add an account'))}</button>${goalsSettings()}</section>
+        <button class="btn ghost wide" data-act="acc-edit">${ICON.plus}${esc(t('Add an account'))}</button>${goalsSettings()}
+        <label class="field"><span>${esc(t('Default account for typed expenses'))}</span><select data-input="quick-account"><option value="">${esc(t('Choose automatically'))}</option>${S.accounts.filter(a => !owing(a)).map(a => `<option value="${esc(a.id)}"${settings().quickAccount === a.id ? ' selected' : ''}>${esc(a.name)} (${esc(a.currency || 'MYR')})</option>`).join('')}</select></label>
+        <p class="fine">${esc(t('Used when this account is in the current view. You can change it for each entry.'))}</p></section>
       <section class="card" id="joint"><h2>${esc(t('Joint account'))}</h2>
         <p class="fine">${esc(hasJoint() ? t('Send your joint accounts to your partner as a file. They import it in Tally, and their changes come back the same way.') : t('In a relationship? Mark an account as Joint (tap it above) to keep shared money apart from your own and share it with your partner.'))}</p>
         ${hasJoint() ? `<button class="btn ghost wide" data-act="joint-share">${ICON.download}${esc(t('Share joint accounts'))}</button>` : ''}
         <button class="btn ghost wide" data-act="restore-pick">${ICON.upload}${esc(t('Import from my partner'))}</button></section>
-      <section class="card" id="remind"><h2>${esc(t('Daily reminder'))}</h2><p class="fine">${esc(t("Your calendar reminds you to add the day's spending, even with Tally closed."))}</p>
+      ${isNative ? `<section class="card" id="remind"><h2>${esc(t('Daily reminder'))}</h2><p class="fine">${esc(t('A notification on this phone if you have not logged an expense today. No calendar needed. Android may send it later than the time you choose.'))}</p>
+        <p class="fine">${esc(t('Enable asks Android for notification permission. Tally cannot read notifications from other apps.'))}</p>
+        <p class="fine">${esc(t('While enabled, a date-only logging marker is kept outside your encrypted book. No amounts or account details. Turning it off removes the marker.'))}</p>
+        <label class="field"><span>${esc(t('Remind me at'))}</span><input id="local-remind-at" type="time" value="21:00" disabled></label>
+        <p class="fine" id="local-remind-status" role="status" aria-live="polite">${esc(t('Checking reminder settings…'))}</p>
+        <div class="row2"><button class="btn" data-act="local-remind-enable" disabled>${esc(t('Enable reminder'))}</button><button class="btn ghost" data-act="local-remind-disable" disabled>${esc(t('Turn off reminder'))}</button></div></section>` : `<section class="card" id="remind"><h2>${esc(t('Daily reminder'))}</h2><p class="fine">${esc(t("Your calendar reminds you to add the day's spending, even with Tally closed."))}</p>
         <label class="field"><span>${esc(t('Remind me at'))}</span><input id="remind-at" type="time" value="${esc(settings().remindAt || '21:00')}"></label>
-        <div class="row2"><button class="btn" data-act="remind-google">${ICON.calendar}${esc(t('Google Calendar'))}</button><button class="btn ghost" data-act="remind-ics">${ICON.download}${esc(t('Other calendar'))}</button></div></section>
+        <div class="row2"><button class="btn" data-act="remind-google">${ICON.calendar}${esc(t('Google Calendar'))}</button><button class="btn ghost" data-act="remind-ics">${ICON.download}${esc(t('Other calendar'))}</button></div></section>`}
       <section class="card" id="reader"><h2>${esc(t('Receipt reader'))}</h2><p class="fine" id="reader-state">${esc(t('The reader (about 30 MB) downloads the first time you scan. Get it now on Wi-Fi so scanning works offline straight away.'))}</p>
         <div class="dl" id="reader-dl" hidden><progress id="ocr-prog" max="100" value="0" aria-label="${esc(t('Downloading the receipt reader'))}"></progress><span id="ocr-pct" class="fine num"></span></div>
         <button class="btn ghost wide" data-act="reader-get">${ICON.download}${esc(t('Download the receipt reader now'))}</button></section>
       <section class="card" id="backup"><h2 id="s-backup">${esc(t('Backup'))}</h2>
-        <p class="fine">${esc(last ? t('Last backup: {0}', last.slice(0, 10)) : t('Not backed up yet'))} · ${esc(t('Tally keeps everything on this phone. Save a backup file to Google Drive or email it to yourself.'))}</p>
+        <p class="fine">${backupEvidence()} · ${esc(t('Tally keeps everything on this phone. Save a backup file to Google Drive or email it to yourself.'))}</p>
         <div class="row2"><button class="btn" data-act="backup">${ICON.download}${esc(t('Back up now'))}</button><button class="btn ghost" data-act="restore-pick">${esc(t('Restore'))}</button></div>
+        <button class="btn ghost wide" data-act="backup-restore-help">${esc(t('Restore help'))}</button>
         <button class="btn ghost wide" data-act="migration-guide">${esc(t('Migration help'))}</button>
         <p class="warnbox">${ICON.alert}<span>${esc(isNative ? t('Uninstalling Tally, clearing its app data, or resetting this phone deletes your entries, accounts and receipt photos. Back up first.') : t('Uninstalling Tally or clearing its site data deletes your Tally entries, accounts and receipt photos from this phone. Back up first.'))} <button class="link" data-act="storage-info">${esc(t('How your data is kept'))}</button></span></p>
         ${storage.persisted == null ? '' : `<p class="fine">${esc(storage.persisted ? t('Storage: protected. The browser will not clear Tally to free up space.') : t('If the phone runs out of space, the browser may clear Tally. A backup file keeps you safe.'))}</p>`}</section>
@@ -330,6 +364,12 @@ export const settingsView = {
   },
 };
 export const input = {
+  'quick-account': async el => {
+    const previous = settings().quickAccount || '';
+    if (el.value && !S.accounts.some(a => a.id === el.value && !owing(a))) { el.value = previous; return; }
+    try { await setSetting('quickAccount', el.value || null); }
+    catch { el.value = previous; toast(t('Could not save. Your phone may be out of space.'), { k: 'bad' }); }
+  },
   'scan-shortcut': async el => { try { await Capacitor.Plugins.TallyNative.scanShortcut({ button: el.value }); } catch { el.value = 'off'; toast(t('Could not save. Your phone may be out of space.'), { k: 'bad' }); } },
   'set-q': el => { findQ = el.value; findSettings(); if (hits.length) announce(t('{0} found', hits.length)); },
 module: async el => { await setModules({ [el.dataset.k]: el.checked }); render(); $(`[data-input="module"][data-k="${el.dataset.k}"]`)?.focus(); },
@@ -740,13 +780,13 @@ async function restoreText(text, zip = {}) {
 }
 
 /** The backup, as JSON, or with photos as a zip holding the same JSON plus photos/<id>.jpg. */
-async function backupBlob(withPhotos, { name, text } = backupFile(), txs = S.tx) {
+async function backupBlob(withPhotos, { name, text, details } = backupFile(), txs = S.tx) {
   const json = new TextEncoder().encode(text);
-  if (!withPhotos) return { name, blob: new Blob([json], { type: 'application/json' }), missing: 0, jsonBytes: json.length, entries: 1 };
+  if (!withPhotos) return { name, blob: new Blob([json], { type: 'application/json' }), missing: 0, jsonBytes: json.length, entries: 1, details: details && { ...details, photos: 0, protected: false } };
   const files = [{ name: BACKUP_JSON, data: json }];
   let missing = 0;
   for (const id of new Set(txs.map(x => x.receiptId).filter(Boolean))) { const p = await getPhoto(id); if (p) files.push({ name: `photos/${id}.jpg`, data: new Uint8Array(await p.arrayBuffer()) }); else missing++; }
-  return { name: name.replace(/\.json$/, '.zip'), blob: zipStore(files), missing, jsonBytes: json.length, entries: files.length };
+  return { name: name.replace(/\.json$/, '.zip'), blob: zipStore(files), missing, jsonBytes: json.length, entries: files.length, details: details && { ...details, photos: files.length - 1, missing, protected: false } };
 }
 /** The backup as the sheet asks: with or without photos, and sealed with its password when one is typed. Null: too short. */
 async function sealedBackup(r = null, pass = '#bk-pass', err = '#bk-err') {
@@ -759,7 +799,7 @@ async function sealedBackup(r = null, pass = '#bk-pass', err = '#bk-err') {
   if (!pw) return r;
   if (pw.length < 10) { $(err).textContent = t('Use at least 10 characters.'); $(pass).focus(); return null; }
   const text = await sealBackup(new Uint8Array(await r.blob.arrayBuffer()), pw);
-  return { ...r, name: r.name.replace(/\.(json|zip)$/, '.locked.json'), blob: new Blob([text], { type: 'application/json' }) };
+  return { ...r, name: r.name.replace(/\.(json|zip)$/, '.locked.json'), blob: new Blob([text], { type: 'application/json' }), details: r.details && { ...r.details, protected: true } };
 }
 /** Ask for a protected backup's password. → the password, or null (cancelled). */
 function askPassword() {
@@ -773,7 +813,7 @@ function askPassword() {
 }
 const warnMissingPhotos = n => { if (n) toast(t('{0} receipt photos could not be included in this backup.', n), { k: 'warn' }); };
 const photoCount = () => new Set(S.tx.map(x => x.receiptId).filter(Boolean)).size;
-const backupFile = () => ({ name: `tally-backup-${today()}.json`, text: makeBackup({ accounts: S.accounts, tx: S.tx, recurring: S.recurring, kv: { budgets: S.kv.budgets, rules: S.kv.rules, customCats: S.kv.customCats, shopNames: S.kv.shopNames || {}, itemNames: S.kv.itemNames || {}, catColors: S.kv.catColors, catIcons: S.kv.catIcons, goals: S.kv.goals, subcats: S.kv.subcats || {}, subRules: S.kv.subRules || {}, settings: backupSettings({ monthStart: 1, weekStart: 1, textSize: 100, ...settings() }) } }) });
+const backupFile = () => ({ details: { transactions: S.tx.length, generation: bookGeneration() ?? null }, name: `tally-backup-${today()}.json`, text: makeBackup({ accounts: S.accounts, tx: S.tx, recurring: S.recurring, kv: { budgets: S.kv.budgets, rules: S.kv.rules, customCats: S.kv.customCats, shopNames: S.kv.shopNames || {}, itemNames: S.kv.itemNames || {}, catColors: S.kv.catColors, catIcons: S.kv.catIcons, goals: S.kv.goals, subcats: S.kv.subcats || {}, subRules: S.kv.subRules || {}, settings: backupSettings({ monthStart: 1, weekStart: 1, textSize: 100, ...settings() }) } }) });
 // ---- joint accounts: a file for the spouse, and theirs merged in -----------------------------------------------------
 const jointTx = () => { const j = jointIds(); return S.tx.filter(x => j.has(x.accountId) || j.has(x.toAccountId)); };
 const jointFile = () => ({ name: `tally-joint-${today()}.json`, text: makeJointShare({ accounts: S.accounts, tx: S.tx, kv: S.kv, recurring: S.recurring }, settings().myName || '') });
@@ -798,10 +838,35 @@ async function importJoint(data, zip = {}) {
   for (const [n, bytes] of Object.entries(zip)) { const id = n.slice(7, -4); if (n.startsWith('photos/') && wanted.has(id)) { const jpeg = await reencode(new Blob([bytes])); if (jpeg) await savePhoto(id, jpeg); } }   // same size and pixel limits as a backup
   toast(t('{0} joint entries added or updated from {1}', theirs, from), { k: 'good', icon: 'check' });
 }
-async function backedUp(msg) {
+/** Local evidence only: native confirms copy; browser/share confirm initiation/chooser completion. */
+function backupEvidence() {
+  const last = S.kv.lastBackup, r = S.kv.backupReceipt;
+  if (!r || r.when !== last || (r.generation ?? null) !== (bookGeneration() ?? null) || !['native-save', 'download', 'share'].includes(r.kind)
+    || !Number.isSafeInteger(r.transactions) || r.transactions < 0 || !Number.isSafeInteger(r.photos) || r.photos < 0 || typeof r.name !== 'string') {
+    return esc(last ? t('Last backup or restore: {0}', last.slice(0, 10)) : t('Not backed up yet'));
+  }
+  const date = `${fmtDate(r.when.slice(0, 10))} ${r.when.slice(11, 16)}`;
+  const label = r.kind === 'native-save' ? 'Last file save confirmed: {0}' : r.kind === 'download' ? 'Last backup download started: {0}' : 'Last backup share completed: {0}';
+  const destination = r.kind === 'native-save' ? 'Look in the folder you chose. Tally does not know its location or any new file name.' : r.kind === 'download' ? 'Find the file in Downloads or your chosen folder before relying on it.' : 'Check the file arrived in the receiving app before relying on it.';
+  return `<b>${esc(t(label, date))}</b><br>${esc(t('Suggested file name: {0}', r.name))}<br>${esc(t('Contents: {0} entries and {1} receipt photos.', r.transactions, r.photos))}
+    ${esc(t(r.protected ? 'Backup protected with a password.' : 'No backup password.'))}<br>${esc(t(destination))}
+    ${r.missing ? `<br>${esc(t('{0} receipt photos could not be included in this backup.', r.missing))}` : ''}`;
+}
+function restoreHelp() {
+  openSheet(`<div class="sheethead"><h2 class="sh-title">${esc(t('Restore help'))}</h2><button class="icon-btn" data-act="sheet-close" aria-label="${esc(t('Close'))}">${ICON.x}</button></div>
+    <p class="sh-body">${esc(t('1. Find your Tally backup file in Downloads, Files, or the app where you kept it.'))}</p>
+    <p class="sh-body">${esc(t('2. Tap {0} below, choose the file, and enter its backup password if asked.', t('Restore')))}</p>
+    <p class="sh-body">${esc(t('3. Review the backup. If offered, {0} keeps both books; {1} removes the current book. {2} leaves it unchanged.', t('Merge (keep both, recommended)'), t("Replace Tally's data on this phone"), t('Cancel')))}</p>
+    <p class="fine">${esc(t('Check your accounts, entries and receipt photos after restoring before deleting the old copy.'))}</p>
+    <div class="row2 sheetfoot"><button class="btn" data-act="backup-help-pick">${ICON.upload}${esc(t('Restore'))}</button><button class="btn ghost" data-act="sheet-close">${esc(t('Close'))}</button></div>`, { label: t('Restore help') });
+}
+
+async function backedUp(msg, receipt) {
   const migrationCheck = !isNative && !!$('[data-act="migration-check"]');
   const first = !S.kv.lastBackup;
-  await setKv('lastBackup', `${today()}T${nowTime()}`);
+  const when = `${today()}T${nowTime()}`;
+  if (receipt) await putAll({ kv: { lastBackup: when, backupReceipt: { ...receipt, when } } });
+  else await setKv('lastBackup', when);
   const w = first && firstWord('backup');
   closeSheet(); render(); toast(w || msg, { k: 'good', icon: 'check', cheer: !!w });
   if (migrationCheck) migrationGuide(2);
@@ -847,6 +912,8 @@ export const act = {
     toast(t('The receipt reader is ready on this phone and works offline.'), { k: 'good', icon: 'check' });
   },
   // A daily reminder from the phone's own calendar: no server, works with the app closed.
+  'local-remind-enable': () => changeLocalReminder(true),
+  'local-remind-disable': () => changeLocalReminder(false),
   'remind-google': async () => { const ev = await dailyReminder(); window.open(googleUrl(ev), '_blank', 'noopener'); },
   'remind-ics': async () => { const result = await download('tally-daily-reminder.ics', ics([await dailyReminder()]), 'text/calendar'); if (isNative && result?.cancelled !== false) return; toast(t('Open the file to add the reminder to your calendar.'), { k: 'good', icon: 'check' }); },
   feedback: () => openFeedback(APP_VERSION),
@@ -1168,6 +1235,8 @@ export const act = {
     const el = document.createElement('button'); el.className = 'btn ghost wide'; el.dataset.act = 'migration-check'; el.textContent = t('Check backup file');
     $('.scrim:not(.out) .sheet')?.append(el);
   },
+  'backup-restore-help': () => restoreHelp(),
+  'backup-help-pick': () => { closeSheet(); act['restore-pick'](); },
   'restore-pick': () => {
     // No accept filter (Android hides .mmbackup and some .json files); importFile routes by content and size.
     const inp = Object.assign(document.createElement('input'), { type: 'file' });
@@ -1205,7 +1274,7 @@ export const act = {
     const r = await sealedBackup(); if (!r) return;
     const { name, blob, missing } = r;
     try { if (!(await shareFile(name, blob, blob.type))) return act['bk-save'](); } catch (e) { if (e?.name === 'AbortError') return; throw e; } // closed the share sheet: nothing sent
-    await backedUp(t('Sent {0}. Check it arrived before you rely on it.', name));
+    await backedUp(t('Sent {0}. Check it arrived before you rely on it.', name), { ...r.details, name, kind: 'share' });
     warnMissingPhotos(missing);
   },
   'bk-save': async b => {
@@ -1216,7 +1285,7 @@ export const act = {
     try {
       const result = await download(name, blob, blob.type);
       if (isNative && result?.cancelled !== false) return;
-      await backedUp(isNative ? `${t('Saved')}: ${name}` : t('Download started. Check your Downloads folder for {0}.', name));
+      await backedUp(isNative ? `${t('Saved')}: ${name}` : t('Download started. Check your Downloads folder for {0}.', name), { ...r.details, name, kind: isNative ? 'native-save' : 'download' });
       warnMissingPhotos(missing);
     } catch {
       toast(t('Could not save. Your phone may be out of space.'), { k: 'bad' });

@@ -39,6 +39,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle state) {
         registerPlugin(TallyNativePlugin.class);
+        registerPlugin(TallyRemindersPlugin.class);
         super.onCreate(state);
         if (bridge == null) return;
         bridge.setWebViewClient(new BridgeWebViewClient(bridge) {

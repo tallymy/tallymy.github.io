@@ -105,7 +105,7 @@ export const input = {
   // Typing a name picks the category it had before (until one is tapped): "Grab to office" → Transport.
   'tx-name': el => {
     // The account this shop was paid from before (a toll on TNG), unless one was picked by hand.
-    if (draft && !accPicked && draft.type !== 'transfer' && S.tx.length) { const id = defaultAccount(draft.type === 'income' ? 'income' : 'quick', { shop: el.value, amount: draft.amount || 0 }), sel = $('#tx-acc'); if (id && sel && sel.value !== id) { sel.value = id; draft.accountId = id; } }
+    if (draft && !accPicked && draft.type !== 'transfer' && S.tx.length) { const id = defaultAccount(draft.type === 'income' ? 'income' : 'quick', { shop: el.value, amount: draft.amount || 0, typedExpense: draft.type === 'expense' }), sel = $('#tx-acc'); if (id && sel && sel.value !== id) { sel.value = id; draft.accountId = id; } }
     if (!draft || catPicked || draft.type === 'transfer' || draft.items?.length) return;
     const c = guessCategory(el.value, draft.type), sheet = el.closest('.sheet');
     if (!c || c === draft.category || !sheet?.querySelector(`[data-act="tx-cat"][data-c="${CSS.escape(c)}"]`)) return;
@@ -297,7 +297,7 @@ export function openTxSheet(preset = {}) {
   const resume = !Object.keys(preset).length && unsaved && Date.now() - unsaved.at < 15 * 60e3 ? unsaved : null;
   unsaved = null;
   draftBase = null;
-  draft = resume ? resume.draft : { id: uid('t'), type: 'expense', amount: 0, accountId: defaultAccount('quick', { amount: preset.amount || 0 }), category: usualCategory(), date: today(), time: nowTime(), merchant: '', source: 'quick', ...preset };
+  draft = resume ? resume.draft : { id: uid('t'), type: 'expense', amount: 0, accountId: defaultAccount('quick', { amount: preset.amount || 0, typedExpense: !preset.type || preset.type === 'expense' }), category: usualCategory(), date: today(), time: nowTime(), merchant: '', source: 'quick', ...preset };
   catPicked = resume ? resume.cat : !!preset.category; accPicked = resume ? resume.acc : !!preset.accountId;
   catInView(openSheet(sheetHtml(), { label: t('Add'), onClose: () => {
     if (S.tx.some(x => x.id === draft.id)) return;   // saved
@@ -409,7 +409,7 @@ export const act = {
   'tx-splitf': async () => { const x = S.tx.find(y => y.id === draft.id); if (!x) return; closeSheet(); (await import('./splitbill.js')).openSplit(x); },
   'tx-type': b => {
     readForm(); draft.type = b.dataset.type;
-    if (!accPicked && draft.type !== 'transfer') { const id = defaultAccount(draft.type === 'income' ? 'income' : 'quick', { amount: draft.amount || 0 }), sel = $('#tx-acc'); if (id && sel) sel.value = id; }   // money in lands where income usually does
+    if (!accPicked && draft.type !== 'transfer') { const id = defaultAccount(draft.type === 'income' ? 'income' : 'quick', { amount: draft.amount || 0, typedExpense: draft.type === 'expense' }), sel = $('#tx-acc'); if (id && sel) sel.value = id; }   // money in lands where income usually does
     // Money in starts on the kind used last (a rider's payout, a stall's sales, a pension), not always Salary.
     if (draft.type === 'income' && !incomeCats().some(c => c.id === draft.category)) draft.category = lastIncomeCat();
     if (draft.type === 'expense' && incomeCats().some(c => c.id === draft.category)) draft.category = 'other';

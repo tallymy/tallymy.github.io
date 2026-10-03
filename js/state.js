@@ -1,11 +1,11 @@
 // In-memory state over IndexedDB. Views read S; every change goes through a function here so it is saved.
 import * as db from './db.js';
-import { isNative } from './native.js';
+import { isNative, mirrorReminderDay } from './native.js';
 import { typedShift, CAPS, CAT_CODE, catName, sameCategory, mapCategory } from './io.js';
 import { keepReceiptUntil, CATEGORIES, INCOME_CATEGORIES, itemKey, cycleKey, nextColor, pickAccount, balances, isFx, rateOf, toRM, ownCategories, movedCategories, owing } from './engine.js';
 
 export const S = { accounts: [], tx: [], recurring: [], kv: {} };
-const KV_KEYS = ['settings', 'budgets', 'rules', 'customCats', 'dismissed', 'lastBackup', 'reviewDraft', 'scanQueue', 'catColors', 'catIcons', 'jointGone', 'shopNames', 'itemNames', 'goals', 'subcats', 'subRules', 'deskPlace', 'bookGeneration'];   // every key setKv writes must be here, or it is lost on restart
+const KV_KEYS = ['settings', 'budgets', 'rules', 'customCats', 'dismissed', 'lastBackup', 'backupReceipt', 'reviewDraft', 'scanQueue', 'catColors', 'catIcons', 'jointGone', 'shopNames', 'itemNames', 'goals', 'subcats', 'subRules', 'deskPlace', 'bookGeneration'];   // every key setKv writes must be here, or it is lost on restart
 export const bookGeneration = () => S.kv.bookGeneration;
 const bookGuard = generation => ({ kv: [{ id: 'bookGeneration', value: generation == null ? undefined : { key: 'bookGeneration', value: generation } }] });
 const TRANSIENT_KV = ['reviewDraft', 'scanQueue', 'jointGone', 'deskPlace'];
@@ -35,6 +35,7 @@ export async function load() {
   S.kv.subcats ||= {};
   S.kv.subRules ||= {};
   S.accounts.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+  await syncReminderDay();
   return mode;
 }
 // Settings apply at once (screens read them straight after) and roll back if the save fails.
@@ -45,8 +46,16 @@ export async function setKv(k, v) {
     if (TRANSIENT_KV.includes(k)) await db.writeAtomic({ put: { kv: [{ key: k, value: v }] }, expected: bookGuard(generation) });
     else await db.setKv(k, v);
   } catch (e) { if (S.kv[k] === v && generation === bookGeneration()) S.kv[k] = old; throw e; }
+  if (k === 'settings') await syncReminderDay();
 }
 export const settings = () => S.kv.settings;
+/** Recompute from the complete book after a committed change, including PC/import/restore. */
+export async function syncReminderDay() {
+  if (!isNative || locked()) return;
+  const day = today();
+  await mirrorReminderDay({ day, logged: S.tx.some(x => x.type === 'expense' && x.date === day && !x.sample),
+    eligible: S.accounts.length > 0 && !settings()?.sample, lang: settings()?.lang || globalThis.document?.documentElement?.lang || 'en' });
+}
 export const setSetting = (k, v) => setKv('settings', { ...S.kv.settings, [k]: v });
 
 // ---- dates (overridable for tests and demos: ?today=2026-09-28&now=12:50, on this computer only) ----------------
@@ -117,6 +126,11 @@ export function defaultAccount(kind = 'quick', o = {}) {
   // A receipt is paid however it was paid, whatever screen is showing (the Business view left on doesn't make a
   // Guardian receipt the stall's): every account and every entry. Typed entries follow the view.
   const all = kind === 'receipt', accounts = (all || !scopedAccounts().length ? S.accounts : scopedAccounts()).filter(a => !owing(a)), txs = all ? rmTx() : scopedTx(), d = today();   // never Owed to you or You owe: those move only through a split
+  // Only the typed expense form opts in; repayment and other callers keep their existing defaults.
+  if (kind === 'quick' && o.typedExpense === true) {
+    const preferred = accounts.find(a => a.id === settings().quickAccount && (!o.currency || (a.currency || 'MYR') === o.currency));
+    if (preferred) return preferred.id;
+  }
   // Typing several in a row in Singapore dollars (a JB commuter at lunch): the next one is in that money too, for 3 hours.
   if (kind === 'quick' && !o.currency) { const last = S.tx.reduce((m, x) => (x.source === 'quick' && x.type === 'expense' && (!m || x.createdAt > m.createdAt) ? x : m), null), a = last && S.accounts.find(y => y.id === last.accountId); if (a?.currency && a.currency !== 'MYR' && Date.now() - last.createdAt < 3 * 36e5) o = { ...o, currency: a.currency }; }
   return pickAccount({ accounts, txs, bal: balances(accounts, txs.filter(x => x.date <= d)).by, kind, ...o });
@@ -269,6 +283,7 @@ export async function saveTx(tx, { expected } = {}) {
   await markGone(left);
   const i = S.tx.findIndex(t => t.id === tx.id);
   S.tx = i >= 0 ? S.tx.map((t, k) => (k === i ? tx : t)) : [...S.tx, tx];   // a new array: results kept for the old one (cached) are dropped
+  await syncReminderDay();
   return tx;
 }
 export async function saveTxs(list) {
@@ -278,6 +293,7 @@ export async function saveTxs(list) {
   const ids = new Set(list.map(t => t.id));
   S.tx = [...S.tx.filter(t => !ids.has(t.id)), ...list];
   await markGone(left);
+  await syncReminderDay();
 }
 /** Rows a save moves off every joint account (to a personal one, or a split bill a friend paid into You owe): the
  *  partner's copy must go as if deleted, or it stays on their joint account for good. → their ids. */
@@ -300,6 +316,7 @@ export async function deleteTxs(ids) {
   // A deleted joint row stays deleted on the spouse's phone too (the share file carries these markers).
   const joint = old.filter(t => j.has(t.accountId) || j.has(t.toAccountId));
   await markGone(joint.map(t => t.id));
+  await syncReminderDay();
   return async () => saveTxs(old);
 }
 /** Joint records deleted here (entries, bills, accounts): the share file carries these markers, so they stay deleted there. */
@@ -327,6 +344,7 @@ export async function saveAccount(a) {
   await db.put('accounts', a);
   const i = S.accounts.findIndex(x => x.id === a.id);
   if (i >= 0) S.accounts[i] = a; else S.accounts.push(a);
+  await syncReminderDay();
 }
 export async function deleteAccount(id) {
   if (S.tx.some(t => t.accountId === id || t.toAccountId === id)) throw new Error('in use');
@@ -334,6 +352,7 @@ export async function deleteAccount(id) {
   await db.del('accounts', id);
   S.accounts = S.accounts.filter(a => a.id !== id);
   if (joint) await markGone([id]);
+  await syncReminderDay();
 }
 export async function saveBill(b, { edited = true } = {}) {
   if (edited) b = { ...b, updatedAt: Date.now() };   // a spouse's copy of a joint bill merges by newest edit

@@ -27,6 +27,7 @@ const typed = io.slice(io.indexOf('export function typedShift('), io.indexOf('co
 let engine;
 try { engine = await readFile(new URL('../js/engine.js', import.meta.url), 'utf8'); }
 catch { engine = await readFile(new URL('../../js/engine.js', import.meta.url), 'utf8'); }
+const { isFx } = await import(`data:text/javascript;base64,${Buffer.from(engine).toString('base64')}`);
 const allocate = engine.slice(engine.indexOf('export function allocate('), engine.indexOf('/** Where an expense')).replace('export ', '');
 const old = { id: 'bill', accountId: 'cash', type: 'expense', amount: 1001, date: '2026-09-01', source: 'quick', merchant: 'Opened bill', createdAt: 1 };
 const account = { id: 'cash', opening: 10000, typed: true, createdAt: new Date('2026-10-01T09:00:00').getTime() };
@@ -36,7 +37,7 @@ async function seed(txs = [old], accounts = [account]) {
 }
 function harness(txs = [old], accounts = [account]) {
   const S = { tx: structuredClone(txs), accounts: structuredClone(accounts), kv: { settings: {} } }; let next = 0;
-  const c = vm.createContext({ S, structuredClone, getRecord: db.get, settings: () => S.kv.settings,
+  const c = vm.createContext({ S, isFx, balHidden: () => false, structuredClone, getRecord: db.get, settings: () => S.kv.settings,
     bookGeneration: () => S.kv.bookGeneration, uid: prefix => `${prefix}${++next}`, todayIso: () => '2026-10-03', pad2: n => String(n).padStart(2, '0'),
     t: s => s, cat: () => ({ name: 'Other' }), validIso: d => /^\d{4}-\d{2}-\d{2}$/.test(d), console: { error() {} },
     putAll: async ({ accounts = [], tx = [], del = {}, expected = {} }) => {
