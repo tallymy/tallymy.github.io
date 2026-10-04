@@ -279,7 +279,8 @@ const HEAD = {
   category: [/^(category|categories|kategori|类别|類別|分类|分類)$/i, /categor|kategori|类别|類別|分类|分類/i],
   merchant: [/^(merchant|payee|peniaga|商家|shop|kedai|recipient|penerima|item|items|perkara|perihal|项目|項目|摘要|描述|说明|說明|商户|商戶|description|transaction description|keterangan|butiran|catatan|details?|vendor|transaction|transaction details|particulars|what|bill|spent on|for|butiran transaksi|source|sumber|来源|來源)$/i, /merchant|payee|peniaga|商家|shop|kedai|recipient|penerima|description|摘要|描述/i],
   note: [/^(notes?|nota|memo|remarks?|备注|備註|comments?)$/i, /note|nota|memo|keterangan|butiran|备注|備註|details|remark|catatan/i],
-  account: [/^(account|akaun|账户|帳戶|wallet|dompet|paid (by|with|from|using)|pay(ment)? (by|method|mode)|payment (method|mode|type)|method|bayar (guna|dengan|melalui)|kaedah (bayaran|pembayaran)|付款方式|支付方式|who paid|paid by|dibayar oleh|bayar oleh|pembayar|付款人|付款者)$/i, null],
+  account: [/^(accounts?|account name|akaun|账户|帳戶|wallet|dompet)$/i, /^(paid (by|with|from|using)|pay(ment)? (by|method|mode)|payment (method|mode|type)|method|bayar (guna|dengan|melalui)|kaedah (bayaran|pembayaran)|付款方式|支付方式|who paid|paid by|dibayar oleh|bayar oleh|pembayar|付款人|付款者)$/i],
+  currency: [/^(currency(?: [12])?|curr\.?|ccy|(?:account|wallet|transaction) currency|mata wang|货币|貨幣|幣別|币种)$/i, null],
   amount: [/^(amount|jumlah|amaun|金额|金額|value|nilai|sum|price|harga|价格|價格|total|cost|kos|rm|myr|ringgit)( \((rm|myr)\))?$/i, /amount|jumlah|amaun|金额|金額|price|harga/i],
 };
 /**
@@ -316,7 +317,7 @@ export function reshape(rows, tab = '') {
     const blocks = starts.map((s, k) => ({ s, e: k + 1 < starts.length ? starts[k + 1] : r.length }));
     if (!blocks.every(({ s, e }) => { const m = guessMapping(r.slice(s, e)); return m.date != null && money(m) != null; })) continue;
     // Columns by what they mean (the Expenses block's Item and the Income block's Source are both the description).
-    const KEYS = [['date', 'Date'], ['amount', 'Amount'], ['debit', 'Money out'], ['credit', 'Money in'], ['merchant', 'Description'], ['category', 'Category'], ['note', 'Note'], ['account', 'Account']];
+    const KEYS = [['date', 'Date'], ['amount', 'Amount'], ['debit', 'Money out'], ['credit', 'Money in'], ['merchant', 'Description'], ['category', 'Category'], ['note', 'Note'], ['account', 'Account'], ['currency', 'Currency']];
     const maps = blocks.map(({ s, e }) => guessMapping(r.slice(s, e))), keys = KEYS.filter(([k]) => maps.some(m => m[k] != null));
     const title = clean(rows[h - 1]), out = [[...keys.map(([, label]) => label), 'Type']];
     blocks.forEach(({ s, e }, b) => {
@@ -344,7 +345,7 @@ export function reshape(rows, tab = '') {
 export function guessMapping(header) {
   const h = header.map(x => cleanText(x));
   const m = {}; const used = [];
-  for (const pass of [0, 1]) for (const k of ['date', 'balance', 'debit', 'credit', 'type', 'category', 'merchant', 'note', 'account', 'amount']) {
+  for (const pass of [0, 1]) for (const k of ['date', 'balance', 'debit', 'credit', 'type', 'category', 'merchant', 'note', 'account', 'currency', 'amount']) {
     const re = HEAD[k][pass];
     if (m[k] != null || !re) continue;
     const i = h.findIndex((x, j) => re.test(x) && !used.includes(j));
@@ -537,7 +538,41 @@ export function balanceSigns(rows, map, amtOf) {
  * lower case) instead of spending, and its category names map to ours. → also {transfers, loose (a transfer half
  * whose other side isn't in the file, kept as money in or out), adjustments, opening}.
  */
-export function rowsToTx(rows, map, { accountId, accounts = {}, catMap = {}, customCats = [], source = 'import', idPrefix = 'i', now = Date.now(), preset = null, header = [] } = {}) {
+// Currency evidence belongs to the selected numeric cells, never the filename or app-wide currency.
+const CSV_CURRENCY_COLUMN = /^(currency(?: [12])?|curr\.?|ccy|(?:account|wallet|transaction|main) currency|mata wang|货币|貨幣|幣別|币种)$/i;
+const CSV_FOREIGN_TAG = /(?:^|[\s(_/])(?:USD|US\$|SGD|S\$|EUR|GBP|AUD|CAD|NZD|JPY|CNY|RMB|HKD|BND|IDR|THB|INR|KRW|PHP|VND|CHF|BRL|TWD)(?:$|[\s)/_])/i;
+const CSV_CURRENCY_CODES=new Set(['USD','SGD','EUR','GBP','AUD','CAD','NZD','JPY','CNY','HKD','BND','IDR','THB','INR','KRW','PHP','VND','CHF','BRL','TWD','ZAR',...(typeof Intl.supportedValuesOf==='function'?Intl.supportedValuesOf('currency'):[])]);
+export function rowCurrency(row, map, header = []) {
+  const columns = [...new Set([...header.flatMap((h,i)=>CSV_CURRENCY_COLUMN.test(cleanText(h,40))?[i]:[]), ...(Number.isInteger(map.currency)?[map.currency]:[])])];
+  const codes = columns.map(i=>cleanText(row[i],40).toUpperCase()).filter(Boolean);
+  if(codes.some(code=>!['MYR','RM'].includes(code)))return 'other';
+  let myr=codes.length>0;
+  // Match rowsToTx: a nonzero debit wins over credit. The unused cell cannot prove its currency.
+  const money = map.debit != null || map.credit != null ? [fileAmount(row[map.debit]) ? map.debit : map.credit] : [map.amount];
+  for(const i of money){
+    if(i==null||!cleanText(row[i],40)||fileAmount(row[i])===0)continue;
+    const head=cleanText(header[i],60),value=cleanText(row[i],60).toUpperCase();
+    const tags=[...(head.toUpperCase().match(/\b[A-Z]{3}\b/g)||[]),...(value.match(/^[-+(\s]*([A-Z]{3})(?=\s*[+\-(.\d])/)?.slice(1)||[]),...(value.match(/\b([A-Z]{3})\s*\)?$/)?.slice(1)||[])];
+    if(tags.some(code=>code!=='MYR'&&CSV_CURRENCY_CODES.has(code)))return 'other';
+    if(CSV_FOREIGN_TAG.test(head)||/^[-+(\s]*(?:US\$|S\$|(?:USD|SGD|EUR|GBP|AUD|CAD|NZD|JPY|CNY|RMB|HKD|BND|IDR|THB|INR|KRW|PHP|VND|CHF|BRL|TWD)\s*|[€£¥₹₩₱฿])/.test(value))return 'other';
+    if(/(?:^|[\s(_/])(?:MYR|RM|ringgit)(?:$|[\s)/_])/i.test(head)||/^[-+(\s]*(?:MYR|RM)\s*(?=[+\-(.\d])/.test(value)||/\b(?:MYR|RM)\s*\)?$/.test(value))myr=true;
+  }
+  return myr?'MYR':'unknown';
+}
+export function currencyReview(rows,map,{header=[],preset=null}={}){
+  const out={myr:0,unknown:0,other:0},status=header.findIndex(h=>/^(status|transaction status|status transaksi|状态|狀態)$/i.test(cleanText(h,30))),paid=header.findIndex(h=>/^(paid\??|done|settled|dibayar\??|sudah bayar|bayar\??|已付|已付款|已繳)$/i.test(cleanText(h,30)));
+  for(const row of rows){
+    if(status>=0&&/fail|unsuccess|gagal|cancel|batal|reject|declin|revers|refused|失败|失敗|取消/i.test(row[status]??''))continue;
+    if(paid>=0&&/^(false|no|tidak|belum|0|☐|✗|否)$/i.test(cleanText(row[paid],10)))continue;
+    const ctx=rowCtx(row,map,header);if(preset?.type&&!preset.type(ctx)&&!preset.transfer?.(ctx)&&!preset.adjust?.(ctx))continue;
+    const state=rowCurrency(row,map,header),money=map.debit!=null||map.credit!=null?[map.debit,map.credit]:[map.amount];
+    if(!money.some(i=>i!=null&&fileAmount(row[i]))) { if(state==='other'&&money.some(i=>i!=null&&cleanText(row[i],40)))out.other++;continue; }
+    out[state==='MYR'?'myr':state]++;
+  }
+  return out;
+}
+
+export function rowsToTx(rows, map, { accountId, accounts = {}, catMap = {}, customCats = [], source = 'import', idPrefix = 'i', now = Date.now(), preset = null, header = [], strictCurrency = false, sourceCurrency = null, accountCurrencies = {} } = {}) {
   // Keyed by account names from the file: no prototype, so "constructor" or "__proto__" is just a name.
   const txs = [], skipped = [], legs = [], opening = Object.create(null), adjAt = Object.create(null), firstAt = Object.create(null);
   let adjustments = 0;
@@ -558,8 +593,8 @@ export function rowsToTx(rows, map, { accountId, accounts = {}, catMap = {}, cus
     if (status >= 0 && /fail|unsuccess|gagal|cancel|batal|reject|declin|revers|refused|失败|失敗|取消/i.test(r[status] ?? '')) return skipped.push({ row: n + 2, why: 'failed' });
     if (paidCol >= 0 && /^(false|no|tidak|belum|0|☐|✗|否)$/i.test(cleanText(r[paidCol], 10))) return skipped.push({ row: n + 2, why: 'unpaid' });
     // Another currency (a Currency column, or S$ / SGD in the amount) is never read as ringgit.
-    const explicitCurrencies = header.flatMap((h, i) => /^(currency(?: [12])?|curr\.?|ccy|mata wang|货币|貨幣|幣別|币种)$/i.test(cleanText(h, 30)) ? [cleanText(r[i], 20).toUpperCase()] : []).filter(Boolean);
-    if (explicitCurrencies.some(c => !/^(MYR|RM)$/.test(c)) || (fxCol >= 0 && !cleanText(r[map.amount ?? -1]) && cleanText(r[fxCol])) || /^-?\s*(s\$|sgd\b)/i.test(String(r[map.amount] ?? r[map.debit] ?? r[map.credit] ?? '').trim().slice(0, 40))) return skipped.push({ row: n + 2, why: 'currency' });
+    const currency = rowCurrency(r,map,header);
+    if (currency === 'other' || (fxCol >= 0 && !cleanText(r[map.amount ?? -1]) && cleanText(r[fxCol]))) return skipped.push({ row: n + 2, why: 'currency' });
     const cx = rowCtx(r, map, header), get = cx.get;
     if (preset?.type && !preset.type(cx) && !preset.transfer?.(cx) && !preset.adjust?.(cx)) return skipped.push({ row: n + 2, why: 'type' });
     const rawDate = get('date');
@@ -573,6 +608,7 @@ export function rowsToTx(rows, map, { accountId, accounts = {}, catMap = {}, cus
       if (a != null) { amt = Math.abs(a); type = a < 0 ? (signed ? 'expense' : 'income') : signed ? 'income' : null; sign = a < 0 ? -1 : 1; }
     }
     if (!amt) return skipped.push({ row: n + 2, why: 'amount' });
+    if(strictCurrency && currency==='unknown' && sourceCurrency!=='MYR') return skipped.push({row:n+2,why:sourceCurrency==='OTHER'?'currency':'currency-unconfirmed'});
     const refundRow = !signed && !dc && (fileAmount(get('amount')) ?? 0) < 0;   // a minus in a list of spending: money back
     // A total or subtotal row is the sum of rows already here; a b/f or opening row is where the account started.
     const label = cleanText(`${get('merchant')} ${get('note')} ${/[a-z]/i.test(get('date')) ? get('date') : ''}`, 80);
@@ -585,6 +621,8 @@ export function rowsToTx(rows, map, { accountId, accounts = {}, catMap = {}, cus
     type = preset?.type?.(cx) || type || 'expense'; // ponytail: transfers from unknown apps come in as expenses; pairTransfers joins the ones it can see
     if (!(dc || signed)) sign = type === 'income' ? 1 : -1;  // which way the money went, whatever the type column calls it
     const accName = cleanText(preset?.account ? preset.account(cx) : get('account'), 40);
+    const destination = accName && Object.keys(accounts).length ? ownKey(accounts,accName.toLowerCase()) : accountId;
+    if(strictCurrency && (accountCurrencies[destination] || 'MYR')!=='MYR')return skipped.push({row:n+2,why:'currency-target'});
     // Another app's balance correction: part of the account's opening balance, never spending (dated or not).
     if (preset?.adjust?.(cx) && !preset.transfer?.(cx)) { const k = accName.toLowerCase(); opening[k] = (opening[k] || 0) + sign * amt; (adjAt[k] ||= []).push(date || ''); adjustments++; return; }
     if (!date) return skipped.push({ row: n + 2, why: 'date' });
@@ -598,6 +636,7 @@ export function rowsToTx(rows, map, { accountId, accounts = {}, catMap = {}, cus
     // A Type column that says Transfer: the words say which way ("to TNG" out, "from Maybank" in), and the other half pairs up.
     const typedTr = !preset && TRANSFER_WORD.test(tword) && (() => { const txt = `${get('merchant')} ${get('note')}`.slice(0, 300), other = txt.match(/\b(?:to|ke|kepada|from|dari|daripada)\s+(.+)$/i)?.[1]; return { dir: sign < 0 && (dc || signed) ? 'out' : /\b(from|dari|daripada|received|terima)\b/i.test(txt) ? 'in' : 'out', to: other && ownKey(accounts, cleanText(other, 40).toLowerCase()) ? cleanText(other, 40) : null }; })();
     const tr = preset?.transfer?.(cx) || typedTr;
+    if (tr && strictCurrency && tr.to && (accountCurrencies[ownKey(accounts,cleanText(tr.to,40).toLowerCase())] || 'MYR')!=='MYR')return skipped.push({row:n+2,why:'currency-target'});
     if (tr) { legs.push({ n, date, time, amt, acc, dir: tr.dir || (sign < 0 ? 'out' : 'in'), to: tr.to ? ownKey(accounts, cleanText(tr.to, 40).toLowerCase()) : null, merchant, note }); return; }
     const rawCat = preset?.category ? preset.category(cx) : get('category'), pc = ownKey(preset?.cats, cleanText(rawCat, 60).toLowerCase());
     let category = rawCat ? (!Object.hasOwn(catMap, cleanText(rawCat, 60)) && pc) || mapCategory(rawCat, catMap, merchant, customCats) : categorize(merchant, merchant);

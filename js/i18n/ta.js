@@ -2010,5 +2010,14 @@ export default {
 "Save to this phone": "இந்தக் கைப்பேசியில் சேமி",
 "Network requests recorded by this app since it opened (external links, such as Google Calendar, are not included):": "இந்தச் செயலியைத் திறந்ததிலிருந்து பதிவான பிணையக் கோரிக்கைகள் (Google Calendar போன்ற வெளி இணைப்புகள் இதில் இல்லை):",
 "Clearing the browser's data for Tally or resetting this phone deletes Tally's local book. Back up first.": "உலாவியில் Tally-இன் தரவை அழித்தாலோ இந்தக் கைப்பேசியை மீட்டமைத்தாலோ Tally-இன் உள்ளகக் கணக்குப் புத்தகம் நீக்கப்படும். முதலில் காப்புப்பிரதி எடுங்கள்.",
-"Your book is stored in this browser on this device. Clearing Tally's site data deletes it. Keep a backup file.": "உங்கள் கணக்குப் புத்தகம் இந்தச் சாதனத்தின் உலாவியில் சேமிக்கப்பட்டுள்ளது. Tally-இன் தளத் தரவை அழித்தால் அதுவும் நீக்கப்படும். காப்புப்பிரதிக் கோப்பை வைத்திருங்கள்."
+"Your book is stored in this browser on this device. Clearing Tally's site data deletes it. Keep a backup file.": "உங்கள் கணக்குப் புத்தகம் இந்தச் சாதனத்தின் உலாவியில் சேமிக்கப்பட்டுள்ளது. Tally-இன் தளத் தரவை அழித்தால் அதுவும் நீக்கப்படும். காப்புப்பிரதிக் கோப்பை வைத்திருங்கள்.",
+"Which currency are the unlabelled amounts in?": "நாணயம் குறிப்பிடப்படாத தொகைகள் எந்த நாணயத்தில் உள்ளன?",
+"Some amounts have no currency. Please check the source account before importing.": "சில தொகைகளில் நாணயம் குறிப்பிடப்படவில்லை. இறக்குமதிக்கு முன் மூலக் கணக்கைச் சரிபாருங்கள்.",
+"Choose a currency": "நாணயத்தைத் தேர்ந்தெடு",
+"MYR — Malaysian ringgit": "MYR — மலேசிய ரிங்கிட்",
+"Another currency": "வேறு நாணயம்",
+"Unlabelled amounts in another currency will be left out. This import does not convert currencies.": "வேறு நாணயத்தில் உள்ள, நாணயம் குறிப்பிடப்படாத தொகைகள் தவிர்க்கப்படும். இந்த இறக்குமதி நாணய மாற்றம் செய்யாது.",
+"Choose a currency for the unlabelled amounts before importing.": "இறக்குமதிக்கு முன் நாணயம் குறிப்பிடப்படாத தொகைகளுக்கான நாணயத்தைத் தேர்ந்தெடுங்கள்.",
+"{0} rows target accounts in another currency and were left out. Choose an RM account to import MYR amounts.": "வேறு நாணயக் கணக்குகளுக்கான {0} வரிசைகள் தவிர்க்கப்பட்டன. MYR தொகைகளை இறக்குமதி செய்ய RM கணக்கைத் தேர்ந்தெடுங்கள்.",
+"This Cashew backup contains loans or split debts that Tally cannot import safely. Nothing was imported. Keep the original backup and use Cashew for these debts.": "இந்த Cashew காப்புப்பிரதியில் Tally பாதுகாப்பாக இறக்குமதி செய்ய முடியாத கடன்கள் அல்லது பகிர்ந்த பில்லின் நிலுவைகள் உள்ளன. எதுவும் இறக்குமதி செய்யப்படவில்லை. அசல் காப்புப்பிரதியை வைத்திருந்து, இந்தக் கடன்களை Cashew-இல் தொடர்ந்து நிர்வகிக்கவும்."
 };

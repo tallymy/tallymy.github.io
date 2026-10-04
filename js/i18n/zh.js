@@ -2011,5 +2011,14 @@ export default {
 "Save to this phone": "保存到这部手机",
 "Network requests recorded by this app since it opened (external links, such as Google Calendar, are not included):": "本应用打开以来记录的网络请求（不包括 Google 日历等外部链接）：",
 "Clearing the browser's data for Tally or resetting this phone deletes Tally's local book. Back up first.": "清除浏览器中的 Tally 数据或重置这部手机，会删除 Tally 的本地账本。请先备份。",
-"Your book is stored in this browser on this device. Clearing Tally's site data deletes it. Keep a backup file.": "账本保存在这台设备的浏览器中。清除 Tally 的网站数据会删除账本，请保留备份文件。"
+"Your book is stored in this browser on this device. Clearing Tally's site data deletes it. Keep a backup file.": "账本保存在这台设备的浏览器中。清除 Tally 的网站数据会删除账本，请保留备份文件。",
+"Which currency are the unlabelled amounts in?": "未标明币种的金额使用什么货币？",
+"Some amounts have no currency. Please check the source account before importing.": "部分金额未标明币种。导入前，请检查来源账户。",
+"Choose a currency": "选择币种",
+"MYR — Malaysian ringgit": "MYR — 马来西亚林吉特",
+"Another currency": "其他货币",
+"Unlabelled amounts in another currency will be left out. This import does not convert currencies.": "使用其他货币的未标币种金额将被排除。此导入不会换算货币。",
+"Choose a currency for the unlabelled amounts before importing.": "导入前，请为未标明币种的金额选择货币。",
+"{0} rows target accounts in another currency and were left out. Choose an RM account to import MYR amounts.": "{0} 行指向其他货币的账户，已被排除。请选择 RM 账户导入 MYR 金额。",
+"This Cashew backup contains loans or split debts that Tally cannot import safely. Nothing was imported. Keep the original backup and use Cashew for these debts.": "此 Cashew 备份包含借贷或分账债务，Tally 无法安全导入。未导入任何内容。请保留原始备份，并继续在 Cashew 中管理这些债务。"
 };

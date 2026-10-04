@@ -2010,5 +2010,14 @@ export default {
 "Save to this phone": "このスマホに保存",
 "Network requests recorded by this app since it opened (external links, such as Google Calendar, are not included):": "このアプリを開いてから記録されたネットワーク要求（Google カレンダーなどの外部リンクは含みません）：",
 "Clearing the browser's data for Tally or resetting this phone deletes Tally's local book. Back up first.": "ブラウザの Tally データを削除したり、このスマホを初期化したりすると、Tally のローカル帳簿が削除されます。先にバックアップしてください。",
-"Your book is stored in this browser on this device. Clearing Tally's site data deletes it. Keep a backup file.": "帳簿はこの端末のブラウザ内に保存されています。Tally のサイトデータを削除すると帳簿も削除されます。バックアップファイルを保管してください。"
+"Your book is stored in this browser on this device. Clearing Tally's site data deletes it. Keep a backup file.": "帳簿はこの端末のブラウザ内に保存されています。Tally のサイトデータを削除すると帳簿も削除されます。バックアップファイルを保管してください。",
+"Which currency are the unlabelled amounts in?": "通貨が記載されていない金額の通貨は？",
+"Some amounts have no currency. Please check the source account before importing.": "一部の金額に通貨の記載がありません。取り込む前に元の口座を確認してください。",
+"Choose a currency": "通貨を選択",
+"MYR — Malaysian ringgit": "MYR — マレーシア・リンギット",
+"Another currency": "別の通貨",
+"Unlabelled amounts in another currency will be left out. This import does not convert currencies.": "別の通貨の記載なし金額は除外します。この取り込みで通貨の換算はしません。",
+"Choose a currency for the unlabelled amounts before importing.": "取り込む前に、通貨が記載されていない金額の通貨を選んでください。",
+"{0} rows target accounts in another currency and were left out. Choose an RM account to import MYR amounts.": "別の通貨の口座を対象とする {0} 行を除外しました。MYR の金額を取り込むには RM の口座を選んでください。",
+"This Cashew backup contains loans or split debts that Tally cannot import safely. Nothing was imported. Keep the original backup and use Cashew for these debts.": "このCashewバックアップには、Tallyで安全に取り込めない貸し借りや割り勘の債務が含まれています。何も取り込んでいません。元のバックアップを保管し、これらの債務はCashewで管理してください。"
 };

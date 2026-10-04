@@ -199,6 +199,13 @@ function readCashew({ rows, cols, now }) {
   if (!need('transactions', ['transaction_pk', 'amount', 'category_fk', 'wallet_fk', 'date_created']) || !need('wallets', ['wallet_pk', 'name']) || !need('categories', ['category_pk', 'name']))
     throw new Error('This Cashew backup is from a version Tally does not know yet.');
   const cw = pk => `cw_${hash(pk)}`, tc = cols('transactions'), opt = c => (tc.has(c) ? c : `null as ${c}`);
+  // Refuse the entire file before projecting any rows. Partial collections can clear
+  // type=3 while keeping objective_loan_fk; importing those as ordinary cashflow loses debt.
+  // Probe the full table, not the later 200000-row preview limit.
+  const debt = [tc.has('type') ? "(type = 3 or cast(type as text) = '3')" : '',
+    tc.has('objective_loan_fk') ? "(objective_loan_fk is not null and length(cast(objective_loan_fk as text)) > 0)" : ''].filter(Boolean);
+  if (debt.length && rows(`select 1 as unsupported from transactions where ${debt.join(' or ')} limit 1`).length)
+    throw Object.assign(new Error("This Cashew backup contains loans or split debts that Tally cannot import safely. Nothing was imported. Keep the original backup and use Cashew for these debts."), { code: 'UNSUPPORTED_CASHEW_DEBT' });
   const customCats = [], catMap = Object.create(null), subMap = Object.create(null);
   const categories = rows(`select category_pk, name, ${cols('categories').has('income') ? 'income' : '0 as income'}, ${cols('categories').has('main_category_pk') ? 'main_category_pk' : 'null as main_category_pk'} from categories limit 2000`);
   const categoryIds = new Set(categories.map(c => String(c.category_pk)));

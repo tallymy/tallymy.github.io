@@ -4,7 +4,7 @@ import { t, setLang, getLang, LANGS, langTag, fmtDate, fmtMonth, fuzzyScore, eng
 import { esc, ICON, MASK, balHidden, openSheet, closeSheet, confirmSheet, toast, $, $$, haptic, announce } from '../ui.js';
 import { lockOn, lockSheet, lockOff, askCode, encOn, encryptOn, encryptOff } from '../lock.js';
 import { keepReceiptUntil, fmtRM, parseAmount, balances, ACCOUNT_KINDS, CATEGORIES, INCOME_CATEGORIES, calcAmount, nextColor, fmtAcct, tooLarge, isFx, rateOf, FX_START, ownCategories, incomeCategory, owing } from '../engine.js';
-import { ownKey, fileToRows, reshape, guessMapping, headerRow, rowsToTx, openingFromBalance, mapCategory, sameCategory, OTHER_NAME, catName as theirCatName, photosToWrite, fitCats, overCap, overCapAfter, SEALED_MAX, backupFits, parseCSV, sheetCsvUrl, sealBackup, openBackup, isSealed, toCSV, toTSV, toXlsx, txRows, toQIF, makeBackup, readBackup, mergeBackup, backupSettings, download, shareFile, cleanText, importIds, LIMITS, zipStore, unzip, BACKUP_JSON, makeJointShare, relinkReloads, mergeJoint, readCapped, imageInfo, splitDups, pairTransfers, asTransfer, hash, cleanDesc, accountNames, isMoneyRow, rowCategory, reloadTransfers, typedShift, isAtm } from '../io.js';
+import { ownKey, fileToRows, reshape, guessMapping, headerRow, rowsToTx, currencyReview, openingFromBalance, mapCategory, sameCategory, OTHER_NAME, catName as theirCatName, photosToWrite, fitCats, overCap, overCapAfter, SEALED_MAX, backupFits, parseCSV, sheetCsvUrl, sealBackup, openBackup, isSealed, toCSV, toTSV, toXlsx, txRows, toQIF, makeBackup, readBackup, mergeBackup, backupSettings, download, shareFile, cleanText, importIds, LIMITS, zipStore, unzip, BACKUP_JSON, makeJointShare, relinkReloads, mergeJoint, readCapped, imageInfo, splitDups, pairTransfers, asTransfer, hash, cleanDesc, accountNames, isMoneyRow, rowCategory, reloadTransfers, typedShift, isAtm } from '../io.js';
 import { detectPreset } from '../presets.js';
 import { parseStatement, statementToTx, linesFromItems, detectProvider, guessKind, PAGE_BREAK, isWallet } from '../statement.js';
 import { render, go, APP_VERSION, MAKER, CONTACT } from '../app.js';
@@ -384,7 +384,8 @@ module: async el => { await setModules({ [el.dataset.k]: el.checked }); render()
     say('#ac-open', 'Balance when you started (RM)', 'Balance when you started ({0})'); say('#ac-now', 'Balance today (RM)', 'Balance today ({0})');
   },
   'month-start': async el => { const v = +el.value; await setSetting('monthStart', v === -1 || v === -2 ? v : Math.min(28, Math.max(1, v || 1))); render(); },
-  'imp-map': el => { if (el.value === '') delete IMP.map[el.dataset.k]; else IMP.map[el.dataset.k] = +el.value; showMapping(); },
+  'imp-map': el => { IMP.sourceCurrency = null; if (el.value === '') delete IMP.map[el.dataset.k]; else IMP.map[el.dataset.k] = +el.value; showMapping(); },
+  'imp-currency': el => { IMP.sourceCurrency = ['MYR','OTHER'].includes(el.value) ? el.value : null; showMapping(); },
   'imp-acc': el => { IMP.accountId = el.value; showMapping(); },
   'imp-accname': el => { IMP.accName = el.value; },
   'imp-joint': el => { IMP.joint = el.checked; },
@@ -554,11 +555,14 @@ async function startMapping(rows, name, { sheet = false } = {}) {
   const saved = settings().importMaps?.[sig], okMap = saved?.map && (saved.preset || null) === (preset?.id || null) && Object.values(saved.map).every(i => Number.isInteger(i) && i >= 0 && i < header.length);
   const have = new Set([...expenseCats(), ...INCOME_CATEGORIES].map(c => c.id));
   const catMap = Object.assign(Object.create(null), Object.fromEntries(Object.entries(saved?.catMap || {}).filter(([, v]) => have.has(v))));   // keyed by the file's names
+  const guessed=guessMapping(header), chosenMap=okMap?{...saved.map}:preset?{...preset.map}:guessed;
+  // Old automatic mappings chose Payment Method before a real Account; prefer the latter again.
+  if(chosenMap.account!=null && guessed.account!=null && /^(accounts?|account name|akaun|账户|帳戶|wallet|dompet)$/i.test(header[guessed.account]) && !/^(accounts?|account name|akaun|账户|帳戶|wallet|dompet)$/i.test(header[chosenMap.account]||''))chosenMap.account=guessed.account;
   const sourceKey = hash(JSON.stringify(rows)), remembered = settings().importSources?.[sourceKey] ?? settings().importSources?.[hash(JSON.stringify([name, rows]))];   // by content: "file (1).csv" is the same file (the old key held the name too)
   const existing = S.accounts.find(a => a.id === remembered) || (sheet && S.accounts.find(a => a.id === settings().sheetAccount)) || (prov && findAccount(prov[1], kind))
     || (!preset && /bank|statement|penyata|结单|對賬/i.test(name) && S.accounts.filter(a => a.kind === 'bank').length === 1 && S.accounts.find(a => a.kind === 'bank'));   // "bank_statement_sep.csv" and one bank account: that one
   // Another app's history or a bank's statement is its own account by default (Round 2: imports landed in Cash).
-  IMP = { rows: rows.slice(h + 1), header, sig, sourceKey, map: okMap ? { ...saved.map } : preset ? { ...preset.map } : guessMapping(header), preset, accountId: existing?.id || 'new', newId: uid('a'), accName: prov?.[1] || (sheet ? t('Google Sheet') : ''), kind, catMap, accIds: Object.create(null), name, sheet, skipFuture: true, tabs: rows.tabs };
+  IMP = { rows: rows.slice(h + 1), header, sig, sourceKey, sourceCurrency:null, map:chosenMap, preset, accountId: existing?.id || 'new', newId: uid('a'), accName: prov?.[1] || (sheet ? t('Google Sheet') : ''), kind, catMap, accIds: Object.create(null), name, sheet, skipFuture: true, tabs: rows.tabs };
   showMapping();
 }
 /** Their categories, each with its Tally category: chosen, remembered, matched by name, or a new one named after it. */
@@ -590,15 +594,16 @@ const unsetTarget = () => IMP.accountId !== 'new' && S.accounts.find(a => a.id =
 /** The rows as they will be imported, with the sheet's choices applied, what is already here, and a new account's opening balance. */
 function impPlan() {
   const acc = accPlan();
-  const { txs: all, skipped, loose, adjustments, opening: adjusted, openKnown } = rowsToTx(IMP.rows, IMP.map, { accountId: impAccount(), accounts: acc.lookup, catMap: catChoices(), customCats: S.kv.customCats, preset: IMP.preset, header: IMP.header });
+  const { txs: all, skipped, loose, adjustments, opening: adjusted, openKnown } = rowsToTx(IMP.rows, IMP.map, { accountId: impAccount(), accounts: acc.lookup, catMap: catChoices(), customCats: S.kv.customCats, preset: IMP.preset, header: IMP.header, strictCurrency:true, sourceCurrency:IMP.sourceCurrency, accountCurrencies:Object.fromEntries(S.accounts.map(a=>[a.id,a.currency||'MYR'])) });
   const tdy = today(), later = all.filter(x => x.date > tdy), future = later.length, txs = IMP.skipFuture ? all.filter(x => x.date <= tdy) : all;
   // Day and month may be swapped only if every such date could be read the other way round, and there are several.
   const swapped = future >= 3 && later.every(x => +x.date.slice(8, 10) <= 12);
   const names = Object.fromEntries([...S.accounts.map(a => [a.id, a.name]), [IMP.newId, newAccName()], ...acc.values.map(a => [a.id, a.v])]);
-  return { txs, ...splitDups(S.tx, txs, names), skipped, future, swapped, acc, loose, adjustments, adjusted, openKnown, opening: (IMP.accountId === 'new' || unsetTarget()) && IMP.map.account == null ? openingFromBalance(IMP.rows, IMP.map, all, tdy) : null };
+  return { txs, ...splitDups(S.tx, txs, names), skipped, future, swapped, acc, loose, adjustments, adjusted, openKnown, opening: !skipped.some(x=>['currency','currency-unconfirmed','currency-target'].includes(x.why)) && !currencyReview(IMP.rows,{amount:IMP.map.balance,currency:IMP.map.currency},{header:IMP.header}).other && (IMP.sourceCurrency==='MYR' || !currencyReview(IMP.rows,{amount:IMP.map.balance,currency:IMP.map.currency},{header:IMP.header}).unknown) && (IMP.accountId === 'new' || unsetTarget()) && IMP.map.account == null ? openingFromBalance(IMP.rows, IMP.map, all, tdy) : null };
 }
 function showMapping() {
   const { header, map, rows } = IMP;
+  const currency=currencyReview(rows,map,{header,preset:IMP.preset}), currencyChosen=['MYR','OTHER'].includes(IMP.sourceCurrency);
   const col = (k, label) => `<label class="field"><span>${esc(label)}</span><select data-input="imp-map" data-k="${k}"><option value="">${esc(t('(none)'))}</option>${header.map((h, i) => `<option value="${i}"${map[k] === i ? ' selected' : ''}>${esc(h || t('Column {0}', i + 1))}</option>`).join('')}</select></label>`;
   const { fresh, dups, skipped, future, swapped, opening, acc, loose, adjustments } = impPlan(), moved = fresh.filter(x => x.type === 'transfer').length;
   const reloads = planMoves(fresh, [...S.accounts, { id: IMP.newId, kind: newKind() }, ...acc.values], '').reloads.length, kept = Object.keys(typedShift(S.accounts, S.tx, fresh, today())).length;
@@ -613,16 +618,18 @@ function showMapping() {
     ${IMP.preset ? `<p class="okbox">${esc(t('Recognised: {0} export. Columns, accounts, transfers and categories are matched for you; change anything that looks wrong.', IMP.preset.name))}</p>` : ''}
     ${tabs?.read.length > 1 ? `<p class="fine">${esc(t('Tabs read: {0}', tabs.read.join(', ')))}</p>` : ''}
     ${tabs?.skipped.length ? `<p class="warnbox">${ICON.alert}<span class="grow">${esc(t('Tabs not imported: {0}', tabs.skipped.map(s => `${s.name} (${s.why === 'rows' ? t('too many rows') : t('no date or amount column')})`).join(', ')))}</span></p>` : ''}
-    <div class="grid2">${col('date', t('Date'))}${col('amount', t('Amount'))}${col('debit', t('Money out (debit)'))}${col('credit', t('Money in (credit)'))}${col('type', t('Income or expense'))}${col('category', t('Category'))}${col('merchant', t('Shop / payee'))}${col('note', t('Note'))}${col('balance', t('Balance'))}${col('account', t('Account'))}</div>
+    <div class="grid2">${col('date', t('Date'))}${col('amount', t('Amount'))}${col('debit', t('Money out (debit)'))}${col('credit', t('Money in (credit)'))}${col('type', t('Income or expense'))}${col('category', t('Category'))}${col('merchant', t('Shop / payee'))}${col('note', t('Note'))}${col('balance', t('Balance'))}${col('account', t('Account'))}${col('currency',t('Currency'))}</div>
+    ${currency.unknown ? `<p class="fine">${esc(t('Some amounts have no currency. Please check the source account before importing.'))}</p><label class="field"><span>${esc(t('Which currency are the unlabelled amounts in?'))}</span><select data-input="imp-currency" required><option value="">${esc(t('Choose a currency'))}</option><option value="MYR"${IMP.sourceCurrency==='MYR'?' selected':''}>${esc(t('MYR — Malaysian ringgit'))}</option><option value="OTHER"${IMP.sourceCurrency==='OTHER'?' selected':''}>${esc(t('Another currency'))}</option></select></label>${IMP.sourceCurrency==='OTHER'?`<p class="warnbox">${esc(t('Unlabelled amounts in another currency will be left out. This import does not convert currencies.'))}</p>`:''}` : ''}
     ${acc.values.length ? `<p class="fine">${esc(t('Accounts from this column: {0}', acc.values.map(a => (a.isNew ? t('{0} (new)', a.v) : a.v)).join(', ')))}</p>` : ''}
     ${map.account == null || acc.blanks ? intoAcc : ''}
     ${Object.keys(choices).length ? `<details open><summary>${esc(t('Their categories → Tally categories'))}</summary><div class="grid2">${Object.entries(choices).map(([s, v]) => `<label class="field"><span>${esc(s)}</span><select data-input="imp-cat" data-src="${esc(s)}">${cats.map(c => `<option value="${esc(c.id)}"${v === c.id ? ' selected' : ''}>${esc(t(c.name))}</option>`).join('')}<option value="${esc(`new:${s}`)}"${v === `new:${s}` ? ' selected' : ''}>${esc(t('New category: {0}', s))}</option></select></label>`).join('')}</div></details>` : ''}
-    ${fresh.length || !dups.length ? `<p class="${fresh.length ? 'okbox' : 'warnbox'}">${esc(t('{0} ready to import', fresh.length))}${dups.length ? ` · ${esc(t('{0} already in Tally, will be skipped', dups.length))}` : ''}${(k => (k.length ? ` · ${esc(k.length === 1 ? t('1 row skipped (no date or amount)') : t('{0} rows skipped (no date or amount)', k.length))}` : ''))(skipped.filter(x => !['currency', 'unpaid', 'type'].includes(x.why)))}</p>
+    ${fresh.length || !dups.length ? `<p class="${fresh.length ? 'okbox' : 'warnbox'}">${esc(t('{0} ready to import', fresh.length))}${dups.length ? ` · ${esc(t('{0} already in Tally, will be skipped', dups.length))}` : ''}${(k => (k.length ? ` · ${esc(k.length === 1 ? t('1 row skipped (no date or amount)') : t('{0} rows skipped (no date or amount)', k.length))}` : ''))(skipped.filter(x => !['currency', 'currency-unconfirmed', 'currency-target', 'unpaid', 'type'].includes(x.why)))}</p>
     ${(k => (k ? `<p class="warnbox">${ICON.alert}<span>${esc(t('{0} rows use another or unreadable currency and were left out. This import cannot safely convert them.', k))}</span></p>` : ''))(skipped.filter(x => x.why === 'currency').length)}
+    ${(k=>k?`<p class="warnbox">${esc(t('{0} rows target accounts in another currency and were left out. Choose an RM account to import MYR amounts.',k))}</p>`:'')(skipped.filter(x=>x.why==='currency-target').length)}
     ${(k => (k ? `<p class="warnbox">${ICON.alert}<span>${esc(t('{0} rows have unknown transaction types and were left out.', k))}</span></p>` : ''))(skipped.filter(x => x.why === 'type').length)}
     ${(k => (k ? `<p class="fine">${esc(t('{0} unpaid rows (Paid? not ticked) left out.', k))}</p>` : ''))(skipped.filter(x => x.why === 'unpaid').length)}
     ${(k => (k ? `<p class="warnbox">${ICON.alert}<span>${esc(t('{0} rows are for accounts after the first 20 and were left out. Import them from a file with fewer accounts.', k))}</span></p>` : ''))(skipped.filter(x => x.why === 'account').length)}
-    ${!fresh.length && !dups.length && !skipped.some(x => ['currency', 'unpaid', 'failed', 'account'].includes(x.why)) ? `<p class="fine">${esc(IMP.map.date == null ? t('No date column found. Pick it above, or open the tab with your transactions.') : (IMP.map.amount ?? IMP.map.debit ?? IMP.map.credit) == null ? t('No amount column found. Pick it above.') : t('This looks like a summary or budget, not a list of transactions. Open the tab with your transactions, or pick the columns above.'))}</p>` : ''}`
+    ${!fresh.length && !dups.length && !skipped.some(x => ['currency', 'currency-unconfirmed', 'currency-target', 'unpaid', 'failed', 'account'].includes(x.why)) ? `<p class="fine">${esc(IMP.map.date == null ? t('No date column found. Pick it above, or open the tab with your transactions.') : (IMP.map.amount ?? IMP.map.debit ?? IMP.map.credit) == null ? t('No amount column found. Pick it above.') : t('This looks like a summary or budget, not a list of transactions. Open the tab with your transactions, or pick the columns above.'))}</p>` : ''}`
       : `<p class="warnbox">${esc(t('All {0} rows are already in Tally. Nothing new to import.', dups.length))}</p>`}
     ${fresh.length ? `<p class="fine">${esc(t('{0} to {1}', fmtDate(dates[0]), fmtDate(dates.at(-1))))} · ${esc(t('{0} spent', fmtRM(sum('expense'))))} · ${esc(t('{0} received', fmtRM(sum('income'))))}</p>` : ''}
     ${moved || loose || adjustments ? `<p class="fine">${[moved && (moved === 1 ? t('1 transfer between your accounts') : t('{0} transfers between your accounts', moved)), loose && (loose === 1 ? t("1 transfer to another wallet: import that wallet's file next and it will be matched.") : t("{0} transfers to another wallet: import that wallet's file next and they'll be matched.", loose)), adjustments && t('{0} balance corrections folded into opening balances (not counted as spending)', adjustments)].filter(Boolean).map(esc).join(' · ')}</p>` : ''}
@@ -631,7 +638,7 @@ function showMapping() {
     ${future ? `<div class="warnbox">${ICON.alert}<span class="grow">${esc(swapped ? t('{0} rows are dated after today. If that looks wrong, check the date column: day and month may be swapped.', future) : future === 1 ? t('1 row is dated after today (a scheduled or future entry).') : t('{0} rows are dated after today (scheduled or future entries).', future))}
       <label class="check"><input type="checkbox" data-input="imp-future"${IMP.skipFuture ? ' checked' : ''}> ${esc(t('Leave them out'))}</label></span></div>` : ''}
     <ul class="list preview">${fresh.slice(0, 5).map(x => `<li class="rowb"><span>${esc(fmtDate(x.date))}</span><span class="grow">${esc(x.merchant || '')}</span><span class="amt ${x.type}">${x.type === 'income' ? '+' : x.type === 'transfer' ? '' : '−'}${esc(fmtRM(x.amount))}</span></li>`).join('')}</ul>
-    <div class="row2"><button class="btn ghost" data-act="sheet-close">${esc(t('Cancel'))}</button><button class="btn" data-act="imp-go" ${fresh.length ? '' : 'disabled'}>${esc(t('Import {0}', fresh.length))}</button></div>`, { label: t('Import') });
+    <div class="row2"><button class="btn ghost" data-act="sheet-close">${esc(t('Cancel'))}</button><button class="btn" data-act="imp-go" ${fresh.length && (!currency.unknown || currencyChosen) ? '' : 'disabled'}>${esc(t('Import {0}', fresh.length))}</button></div>`, { label: t('Import') });
 }
 /**
  * What an import moves between the user's own accounts: a reload that shows up as money out of the bank and money into
@@ -1318,6 +1325,7 @@ export const act = {
     } catch { impErr(t('Could not open that sheet. In Google Sheets, tap Share and set "Anyone with the link" to Viewer, or copy the cells and paste them instead.')); }
   },
   'imp-go': async b => {
+    if(currencyReview(IMP.rows,IMP.map,{header:IMP.header,preset:IMP.preset}).unknown && !['MYR','OTHER'].includes(IMP.sourceCurrency)){showMapping();return impErr(t('Choose a currency for the unlabelled amounts before importing.'));}
     b.disabled = true;
     const { txs, fresh, dups, opening, acc, adjusted, openKnown } = impPlan(), m = IMP.map, made = [], staged = [], now = Date.now();
     if (!fresh.length) { b.disabled = false; return impErr(t('All rows are already in Tally. Nothing new to import.')); }
@@ -1356,7 +1364,7 @@ export const act = {
     // No Balance column: every account the file touched, new or already here, is asked what it holds today (unless
     // the file's own starting balance or corrections said so).
     const known = id => (id === IMP.newId && opening != null) || openKnown.includes(id === IMP.newId || id === IMP.accountId ? '' : acc.values.find(a => a.id === id)?.v.toLowerCase());
-    const blind = m.balance == null, first = !settings().onboarded;   // the tour waits until the balances are in
+    const blind = m.balance == null || (m.account == null && opening == null && (IMP.accountId === 'new' || unset) && !openKnown.includes('')), first = !settings().onboarded;   // the tour waits until the balances are in
     const touched = await commitImport(txs, IMP.preset?.name || IMP.name || t('file'), { accounts: staged, kv: { settings: nextSettings, ...(newCats.length ? { customCats: [...S.kv.customCats, ...newCats] } : {}) }, newAccounts: made, tourLater: blind, undoMore: async () => {
       for (const a of bumped) await saveAccount(a);
       if (newCats.length) await setKv('customCats', S.kv.customCats.filter(c => !newCats.some(n => n.id === c.id) || S.tx.some(x => x.category === c.id)));

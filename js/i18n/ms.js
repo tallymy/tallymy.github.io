@@ -2011,5 +2011,14 @@ export default {
 "Save to this phone": "Simpan di telefon ini",
 "Network requests recorded by this app since it opened (external links, such as Google Calendar, are not included):": "Permintaan rangkaian yang direkodkan oleh aplikasi ini sejak dibuka (pautan luar, seperti Google Calendar, tidak disertakan):",
 "Clearing the browser's data for Tally or resetting this phone deletes Tally's local book. Back up first.": "Memadam data pelayar untuk Tally atau menetapkan semula telefon ini akan memadam buku setempat Tally. Buat sandaran dahulu.",
-"Your book is stored in this browser on this device. Clearing Tally's site data deletes it. Keep a backup file.": "Buku anda disimpan dalam pelayar ini pada peranti ini. Memadam data laman Tally akan memadamnya. Simpan fail sandaran."
+"Your book is stored in this browser on this device. Clearing Tally's site data deletes it. Keep a backup file.": "Buku anda disimpan dalam pelayar ini pada peranti ini. Memadam data laman Tally akan memadamnya. Simpan fail sandaran.",
+"Which currency are the unlabelled amounts in?": "Apakah mata wang bagi amaun tanpa label?",
+"Some amounts have no currency. Please check the source account before importing.": "Sesetengah amaun tiada mata wang. Semak akaun asal sebelum mengimport.",
+"Choose a currency": "Pilih mata wang",
+"MYR — Malaysian ringgit": "MYR — Ringgit Malaysia",
+"Another currency": "Mata wang lain",
+"Unlabelled amounts in another currency will be left out. This import does not convert currencies.": "Amaun tanpa label dalam mata wang lain akan ditinggalkan. Import ini tidak menukar mata wang.",
+"Choose a currency for the unlabelled amounts before importing.": "Pilih mata wang bagi amaun tanpa label sebelum mengimport.",
+"{0} rows target accounts in another currency and were left out. Choose an RM account to import MYR amounts.": "{0} baris menuju akaun dalam mata wang lain dan ditinggalkan. Pilih akaun RM untuk mengimport amaun MYR.",
+"This Cashew backup contains loans or split debts that Tally cannot import safely. Nothing was imported. Keep the original backup and use Cashew for these debts.": "Sandaran Cashew ini mengandungi pinjaman atau hutang bil kongsi yang Tally belum dapat import dengan selamat. Tiada apa-apa diimport. Simpan sandaran asal dan gunakan Cashew untuk hutang ini."
 };
