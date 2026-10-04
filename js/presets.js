@@ -138,7 +138,7 @@ export const PRESETS = [
   // HHmm; which account column is filled says expense, income or (both) transfer; Category SYSTEM rows are opening
   // balances; Big5 text (github.com/andresze020/rumbo docs/features/andromoney-import.md).
   { id: 'andromoney', name: 'AndroMoney', need: ['amount', 'category', 'date', 'expense(transfer out)', 'income(transfer in)'],
-    cols: { date: ['date'], amount: ['amount'], category: ['category'], account: ['expense(transfer out)'], merchant: ['payee/payer'], note: ['note'], time: ['time'] },
+    cols: { date: ['date'], amount: ['amount'], category: ['category'], sub: ['sub-category'], account: ['expense(transfer out)'], merchant: ['payee/payer'], note: ['note'], time: ['time'] },
     account: c => String(c.get('account')).trim() || c.raw('income(transfer in)'),
     type: c => (String(c.get('account')).trim() ? 'expense' : 'income'),
     transfer: c => !!String(c.get('account')).trim() && !!String(c.raw('income(transfer in)')).trim() && { dir: 'out', to: c.raw('income(transfer in)') },
