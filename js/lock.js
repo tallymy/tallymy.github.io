@@ -7,6 +7,7 @@
 // {kind, len, cred?, enc: {salt, iter, iv, key}}: no fast hash to guess against, only the slow unwrap.
 import { S, settings, setSetting, eraseAll } from './state.js';
 import * as db from './db.js';
+import { isNative } from './native.js';
 import { t } from './i18n.js';
 import { esc, ICON, openSheet, closeSheet, toast } from './ui.js';
 
@@ -179,7 +180,7 @@ export function gate() {
     };
     const forgot = (confirm = false) => {
       el.innerHTML = `<div class="lockbox"><div class="tour-ic">${ICON.lock}</div><h2>${esc(confirm ? t("Erase all of Tally's data?") : (pass ? t('Forgot your password?') : t('Forgot your PIN?')))}</h2>
-        <p>${esc(confirm ? t('This deletes only Tally\'s own data: your accounts, entries, receipt photos, budgets, bills, categories and settings, kept in the storage of the browser Tally runs in on this phone. Other apps, your gallery, your files and the rest of the phone are not touched. It cannot be undone. Back up first if you might want them.') : lock.enc ? t('Tally keeps no copy of it, so it cannot be shown or reset, and your encrypted data cannot be recovered without it. You can erase Tally\'s data and start again (a backup file can be restored afterwards).') : pass ? t('Tally keeps no copy of your password, so it cannot be shown or reset. You can still get in with your fingerprint or face if you set it up, or erase Tally\'s data and start again (a backup file can be restored afterwards).') : t('Tally keeps no copy of your PIN, so it cannot be shown or reset. You can still get in with your fingerprint or face if you set it up, or erase Tally\'s data and start again (a backup file can be restored afterwards).'))}</p>
+        <p>${esc(confirm ? (isNative ? t('This deletes your accounts, entries, receipt photos, budgets, bills, categories and settings stored in this app on this phone. Other apps, your gallery and files are not touched. It cannot be undone. Back up first.') : t('This deletes only Tally\'s own data: your accounts, entries, receipt photos, budgets, bills, categories and settings, kept in the storage of the browser Tally runs in on this phone. Other apps, your gallery, your files and the rest of the phone are not touched. It cannot be undone. Back up first if you might want them.')) : lock.enc ? t('Tally keeps no copy of it, so it cannot be shown or reset, and your encrypted data cannot be recovered without it. You can erase Tally\'s data and start again (a backup file can be restored afterwards).') : pass ? t('Tally keeps no copy of your password, so it cannot be shown or reset. You can still get in with your fingerprint or face if you set it up, or erase Tally\'s data and start again (a backup file can be restored afterwards).') : t('Tally keeps no copy of your PIN, so it cannot be shown or reset. You can still get in with your fingerprint or face if you set it up, or erase Tally\'s data and start again (a backup file can be restored afterwards).'))}</p>
         ${!confirm && bio ? `<button class="btn wide" data-l="bio">${esc(t('Use fingerprint or face'))}</button>` : ''}
         <button class="btn ${confirm ? 'danger' : 'ghost danger'} wide" data-l="${confirm ? 'erase-yes' : 'erase'}">${esc(t("Erase Tally's data"))}</button>
         <button class="btn ghost wide" data-l="back">${esc(t('Back'))}</button></div>`;

@@ -20,7 +20,7 @@ window.addEventListener('tally:scan-shortcut', () => {
 
 applySavedLook();   // theme and accent before anything is drawn (the database copy is applied on every render)
 
-export const APP_VERSION = '1.13.3';
+export const APP_VERSION = '1.13.4';
 export const MAKER = 'fir1412', CONTACT = 'fir1412dev@gmail.com';   // the developer, and the data user for feedback (privacy pages)
 // Checking a receipt and Settings (with Welcome and imports) load the first time they are needed, not before Home
 // shows. sw.js still caches them for offline use.
@@ -212,7 +212,7 @@ export const refresh = () => { if (!sheetOpen()) render(); };
     // Photos kept only for a while (Settings → Privacy): older ones go, their entries stay. The day count is from today's date.
     if (settings().photoKeep > 0) setTimeout(() => { const d = new Date(`${today()}T00:00:00Z`); d.setUTCDate(d.getUTCDate() - settings().photoKeep); dropPhotos(d.toISOString().slice(0, 10)).catch(() => {}); }, 9000);
     onSaveFailed(() => toast(t('Could not save. Your phone may be out of space.'), { k: 'bad' }));
-    if (storageMode() === 'localstorage') setTimeout(() => toast(t('Private browsing: data may be lost when you close this tab.'), { k: 'warn' }), 800);
+    if (storageMode() === 'localstorage') setTimeout(() => toast((isNative ? t('Local storage is limited. Keep a backup file and avoid adding receipt photos for now.') : t('Private browsing: data may be lost when you close this tab.')), { k: 'warn' }), 800);
     if (!location.hash && settings().start === 'activity') { history.replaceState(null, '', '#/activity'); shown = 'activity'; }   // start screen
     await takeShared();
     onShared(async files => { while (locked()) await new Promise(r => setTimeout(r, 500)); openShared(files); });   // shared while Tally is already open (Android app)

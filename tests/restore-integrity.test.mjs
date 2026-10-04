@@ -44,7 +44,7 @@ function context(choice = 'replace', sample = false) {
   const old = { id: 'old', accountId: 'sample', receiptId: 'oldphoto', sample: false };
   const S = { accounts: [{ id: 'sample', sample: true }, { id: 'own' }], tx: [old], recurring: [], kv: { settings: { sample }, budgets: {}, goals: [], subcats: { food: ['Own'] }, subRules: { shop: ['food', 'Own'] }, catColors: { food: '#123456' }, catIcons: { food: 'food' }, dismissed: [] } };
   const incoming = { accounts: [{ id: 'new' }], tx: [{ id: 'newtx', accountId: 'new', receiptId: 'newphoto' }], recurring: [], kv: {}, settings: {} };
-  const c = vm.createContext({ db, Blob, S, uid: prefix => `${prefix}${Math.random()}`, TRANSIENT_KV: ['reviewDraft', 'scanQueue', 'jointGone', 'deskPlace'], BACKUP_KV: ['budgets', 'subcats', 'subRules'], kvRows: kv => Object.entries(kv || {}).map(([key, value]) => ({ key, value })), load: async () => {},
+  const c = vm.createContext({ db, Blob, S, isNative: false, uid: prefix => `${prefix}${Math.random()}`, TRANSIENT_KV: ['reviewDraft', 'scanQueue', 'jointGone', 'deskPlace'], BACKUP_KV: ['budgets', 'subcats', 'subRules'], kvRows: kv => Object.entries(kv || {}).map(([key, value]) => ({ key, value })), load: async () => {},
     beginBackupWork: () => ({}), backupStage: async () => {}, finishBackupWork() {},
     restoreSnapshot: async () => ({book:structuredClone(S),expected:{},expectedKeys:{}}), checkBackupWork() {}, commitBackupWork() {},
     readBackup: () => structuredClone(incoming), settings: () => S.kv.settings,

@@ -1,5 +1,11 @@
 // 简体中文. Keys are the English text in the code; {0} {1} are filled in by t().
 export default {
+"Preparing the backup…": "正在准备备份…",
+"Collecting receipt photos… {0} of {1}": "正在收集收据照片… {0}/{1}",
+"Creating the backup ZIP…": "正在创建备份 ZIP…",
+"Protecting the backup with your password…": "正在使用密码保护备份…",
+"Backup file ready.": "备份文件已准备好。",
+
   "Connect to computer": "连接电脑",
   "(guessed, check)": "（推测，请核对）",
   "(no name)": "（无名称）",
@@ -1997,5 +2003,13 @@ export default {
 "{0} rows have unknown transaction types and were left out.": "{0} 行的交易类型无法识别，已跳过。",
 "This backup has an unreadable account currency. Nothing was imported.": "此备份中的账户货币无法识别。未导入任何数据。",
 "This imported account differs from the account already here. Nothing was imported.": "要导入的账户与现有账户不同。未导入任何数据。",
-"This Money Manager backup has transfers between different currencies that cannot be read safely. Nothing was imported.": "此 Money Manager 备份包含不同货币之间的转账，无法安全读取。未导入任何数据。"
+"This Money Manager backup has transfers between different currencies that cannot be read safely. Nothing was imported.": "此 Money Manager 备份包含不同货币之间的转账，无法安全读取。未导入任何数据。",
+"Your book is stored in this app on this phone. Back up before uninstalling Tally or clearing its app data.": "账本保存在这部手机的应用内。卸载 Tally 或清除应用数据前，请先备份。",
+"Stored in this app on this phone. Keep a backup file outside Tally.": "保存在这部手机的应用内。请在 Tally 以外另存备份文件。",
+"This deletes your accounts, entries, receipt photos, budgets, bills, categories and settings stored in this app on this phone. Other apps, your gallery and files are not touched. It cannot be undone. Back up first.": "这会删除这部手机应用内保存的账户、记录、收据照片、预算、账单、分类和设置。其他应用、相册和文件不会受影响。此操作无法撤销，请先备份。",
+"Local storage is limited. Keep a backup file and avoid adding receipt photos for now.": "本地存储受限。请保留备份文件，并暂时不要添加收据照片。",
+"Save to this phone": "保存到这部手机",
+"Network requests recorded by this app since it opened (external links, such as Google Calendar, are not included):": "本应用打开以来记录的网络请求（不包括 Google 日历等外部链接）：",
+"Clearing the browser's data for Tally or resetting this phone deletes Tally's local book. Back up first.": "清除浏览器中的 Tally 数据或重置这部手机，会删除 Tally 的本地账本。请先备份。",
+"Your book is stored in this browser on this device. Clearing Tally's site data deletes it. Keep a backup file.": "账本保存在这台设备的浏览器中。清除 Tally 的网站数据会删除账本，请保留备份文件。"
 };

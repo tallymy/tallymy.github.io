@@ -1,5 +1,11 @@
 // Bahasa Melayu. Keys are the English text in the code; {0} {1} are filled in by t().
 export default {
+"Preparing the backup…": "Menyediakan sandaran…",
+"Collecting receipt photos… {0} of {1}": "Mengumpulkan foto resit… {0} daripada {1}",
+"Creating the backup ZIP…": "Mencipta ZIP sandaran…",
+"Protecting the backup with your password…": "Melindungi sandaran dengan kata laluan anda…",
+"Backup file ready.": "Fail sandaran sedia.",
+
   "Connect to computer": "Sambung ke komputer",
   "(guessed, check)": "(diagak, semak)",
   "(no name)": "(tiada nama)",
@@ -1997,5 +2003,13 @@ export default {
 "{0} rows have unknown transaction types and were left out.": "{0} baris mempunyai jenis transaksi yang tidak dikenali lalu ditinggalkan.",
 "This backup has an unreadable account currency. Nothing was imported.": "Mata wang akaun dalam sandaran ini tidak dapat dibaca. Tiada apa-apa diimport.",
 "This imported account differs from the account already here. Nothing was imported.": "Akaun yang diimport ini berbeza daripada akaun yang sudah ada. Tiada apa-apa diimport.",
-"This Money Manager backup has transfers between different currencies that cannot be read safely. Nothing was imported.": "Sandaran Money Manager ini mempunyai pindahan antara mata wang berbeza yang tidak dapat dibaca dengan selamat. Tiada apa-apa diimport."
+"This Money Manager backup has transfers between different currencies that cannot be read safely. Nothing was imported.": "Sandaran Money Manager ini mempunyai pindahan antara mata wang berbeza yang tidak dapat dibaca dengan selamat. Tiada apa-apa diimport.",
+"Your book is stored in this app on this phone. Back up before uninstalling Tally or clearing its app data.": "Buku anda disimpan dalam aplikasi ini pada telefon ini. Buat sandaran sebelum menyahpasang Tally atau memadam data aplikasinya.",
+"Stored in this app on this phone. Keep a backup file outside Tally.": "Disimpan dalam aplikasi ini pada telefon ini. Simpan fail sandaran di luar Tally.",
+"This deletes your accounts, entries, receipt photos, budgets, bills, categories and settings stored in this app on this phone. Other apps, your gallery and files are not touched. It cannot be undone. Back up first.": "Ini memadam akaun, catatan, gambar resit, bajet, bil, kategori dan tetapan yang disimpan dalam aplikasi ini pada telefon ini. Aplikasi lain, galeri dan fail anda tidak terjejas. Ia tidak boleh dibatalkan. Buat sandaran dahulu.",
+"Local storage is limited. Keep a backup file and avoid adding receipt photos for now.": "Storan setempat terhad. Simpan fail sandaran dan elakkan menambah gambar resit buat masa ini.",
+"Save to this phone": "Simpan di telefon ini",
+"Network requests recorded by this app since it opened (external links, such as Google Calendar, are not included):": "Permintaan rangkaian yang direkodkan oleh aplikasi ini sejak dibuka (pautan luar, seperti Google Calendar, tidak disertakan):",
+"Clearing the browser's data for Tally or resetting this phone deletes Tally's local book. Back up first.": "Memadam data pelayar untuk Tally atau menetapkan semula telefon ini akan memadam buku setempat Tally. Buat sandaran dahulu.",
+"Your book is stored in this browser on this device. Clearing Tally's site data deletes it. Keep a backup file.": "Buku anda disimpan dalam pelayar ini pada peranti ini. Memadam data laman Tally akan memadamnya. Simpan fail sandaran."
 };

@@ -219,7 +219,7 @@ function backupBanner() {
   if (S.tx.length && (S.tx.length >= NEW || (start < Infinity && daysBetween(dayOf(start), tdy) >= 3)) && (!last || daysBetween(last.slice(0, 10), tdy) > 14) && !dismissed().includes(`backup-${tdy}`)) {
     // The first month it's a quiet reminder (orange on day 3 scared people off); after that, or once a backup is 2 weeks old, a warning.
     const calm = !last && start < Infinity && daysBetween(dayOf(start), tdy) < 30;
-    return `<div class="banner ${calm ? 'info' : 'warn'}">${calm ? ICON.lock : ICON.alert}<span class="grow"><b>${esc(last ? t('Last backup {0} days ago', daysBetween(last.slice(0, 10), tdy)) : t('Not backed up yet'))}</b><small>${esc(t("Your Tally data is kept only in this browser's storage on this phone. Uninstalling Tally or clearing the browser's data for Tally deletes it; a backup file keeps it safe."))} <button class="link" data-act="storage-info">${esc(t('How your data is kept'))}</button></small></span>
+    return `<div class="banner ${calm ? 'info' : 'warn'}">${calm ? ICON.lock : ICON.alert}<span class="grow"><b>${esc(last ? t('Last backup {0} days ago', daysBetween(last.slice(0, 10), tdy)) : t('Not backed up yet'))}</b><small>${esc(isNative ? t('Your book is stored in this app on this phone. Back up before uninstalling Tally or clearing its app data.') : t('Your book is stored in this browser on this device. Clearing Tally\'s site data deletes it. Keep a backup file.'))} <button class="link" data-act="storage-info">${esc(t('How your data is kept'))}</button></small></span>
       <span class="bactions"><button class="btn small" data-act="backup">${esc(t('Back up'))}</button><button class="btn small ghost" data-act="dismiss" data-id="backup-${tdy}">${esc(t('Later'))}</button></span></div>`;
   }
   return '';
@@ -351,7 +351,7 @@ function repaySheet(kind, name) {
     <label class="field"><span>${esc(t('Date'))}</span><input id="rp-date" type="date" min="1990-01-01" max="${esc(tdy)}" value="${esc(tdy)}"></label></div>
     ${back ? `<label class="check"><input type="checkbox" id="rp-halal"> ${esc(t('Let the rest go — my treat'))}</label>` : ''}
     <p class="err" id="rp-err" role="alert"></p>
-    <div class="row2"><button class="btn ghost" data-act="sheet-close">${esc(t('Cancel'))}</button><button class="btn" data-x="save">${esc(t('Save'))}</button></div>`, { label: back ? t('Paid back') : t('Pay back') });
+    <div class="row2 sheetfoot"><button class="btn ghost" data-act="sheet-close">${esc(t('Cancel'))}</button><button class="btn" data-x="save">${esc(t('Save'))}</button></div>`, { label: back ? t('Paid back') : t('Pay back') });
   el.addEventListener('click', async e => {
     const b = e.target.closest('[data-x="save"]'); if (!b) return;
     const amount = el.querySelector('#rp-amt').value.trim() === '' ? 0 : calcAmount(el.querySelector('#rp-amt').value), date = el.querySelector('#rp-date').value, acc = el.querySelector('#rp-acc').value, err = m => { el.querySelector('#rp-err').textContent = m; };

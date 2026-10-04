@@ -322,8 +322,8 @@ export const settingsView = {
         <div class="row2"><button class="btn" data-act="backup">${ICON.download}${esc(t('Back up now'))}</button><button class="btn ghost" data-act="restore-pick">${esc(t('Restore'))}</button></div>
         <button class="btn ghost wide" data-act="backup-restore-help">${esc(t('Restore help'))}</button>
         <button class="btn ghost wide" data-act="migration-guide">${esc(t('Migration help'))}</button>
-        <p class="warnbox">${ICON.alert}<span>${esc(isNative ? t('Uninstalling Tally, clearing its app data, or resetting this phone deletes your entries, accounts and receipt photos. Back up first.') : t('Uninstalling Tally or clearing its site data deletes your Tally entries, accounts and receipt photos from this phone. Back up first.'))} <button class="link" data-act="storage-info">${esc(t('How your data is kept'))}</button></span></p>
-        ${storage.persisted == null ? '' : `<p class="fine">${esc(storage.persisted ? t('Storage: protected. The browser will not clear Tally to free up space.') : t('If the phone runs out of space, the browser may clear Tally. A backup file keeps you safe.'))}</p>`}</section>
+        <p class="warnbox">${ICON.alert}<span>${esc(isNative ? t('Uninstalling Tally, clearing its app data, or resetting this phone deletes your entries, accounts and receipt photos. Back up first.') : t('Clearing the browser\'s data for Tally or resetting this phone deletes Tally\'s local book. Back up first.'))} <button class="link" data-act="storage-info">${esc(t('How your data is kept'))}</button></span></p>
+        ${isNative ? `<p class="fine">${esc(t('Stored in this app on this phone. Keep a backup file outside Tally.'))}</p>` : storage.persisted == null ? '' : `<p class="fine">${esc(storage.persisted ? t('Storage: protected. The browser will not clear Tally to free up space.') : t('If the phone runs out of space, the browser may clear Tally. A backup file keeps you safe.'))}</p>`}</section>
       <section class="card" id="s-data"><h2>${esc(t('Import & export'))}</h2><p class="fine">${esc(t('Supported CSV/Excel layouts, bank statements, Google Sheets, selected Money Manager/Cashew backups, or a Tally backup.'))}</p>
         <button class="btn ghost wide" data-act="import-open">${ICON.upload}${esc(t('Import'))}</button>
         <p class="fine">${esc(t('Your data is never locked in: take it to Excel, Google Sheets or another money app any time.'))}</p>
@@ -774,7 +774,7 @@ async function saveMoney2Time(b) {
       try { bmp = await createImageBitmap(blob); if (bmp.width !== p.width || bmp.height !== p.height || bmp.width * bmp.height > LIMITS.pixels) throw new Error('dimensions'); }
       catch { throw new Error(t('Receipt photos must all decode successfully. Entries and photos are saved together; a failure saves nothing.')); }
       finally { bmp?.close?.(); }
-      ++decoded; if(decoded%10===0 || decoded===mm.photos.length)await backupStage(work, 'Checking receipt photos… {0} of {1}', decoded,mm.photos.length); else checkBackupWork(work);
+      ++decoded; if(isNative || decoded%10===0 || decoded===mm.photos.length)await backupStage(work, 'Checking receipt photos… {0} of {1}', decoded,mm.photos.length); else checkBackupWork(work);
       const txIds = p.txIds.filter(id => want.has(id));
       if (!txIds.length) continue;
       const receiptId = uid('p'); receipts.push({ id: receiptId, blob }); expected.receipts.push({ id: receiptId, value: undefined });
@@ -861,10 +861,21 @@ async function reencode(blob) {
     const info = blob.size <= LIMITS.photoBytes && imageInfo(new Uint8Array(await blob.slice(0, 1 << 20).arrayBuffer()));
     if (!info || info.w * info.h > LIMITS.pixels) return null;
     const bmp = await createImageBitmap(blob, { imageOrientation: 'from-image' });
-    const k = Math.min(1, 1200 / Math.max(bmp.width, bmp.height));
-    const c = Object.assign(document.createElement('canvas'), { width: Math.round(bmp.width * k), height: Math.round(bmp.height * k) });
-    c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height); bmp.close?.();
-    return await new Promise(r => c.toBlob(r, 'image/jpeg', 0.8));
+    try {
+      if (!(bmp.width > 0 && bmp.height > 0) || bmp.width * bmp.height > LIMITS.pixels) return null;
+      const k = Math.min(1, 1200 / Math.max(bmp.width, bmp.height));
+      const c = Object.assign(document.createElement('canvas'), { width: Math.max(1,Math.round(bmp.width * k)), height: Math.max(1,Math.round(bmp.height * k)) });
+      c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+      if (isNative) {
+        // Android WebView schedules async canvas encoders at idle; bounded synchronous encoding avoids seconds per photo.
+        const url = c.toDataURL('image/jpeg', 0.8), prefix = 'data:image/jpeg;base64,';
+        if (!url.startsWith(prefix)) return null;
+        const binary = atob(url.slice(prefix.length)), bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        return new Blob([bytes], { type: 'image/jpeg' });
+      }
+      return await new Promise(r => c.toBlob(r, 'image/jpeg', 0.8));
+    } finally { bmp.close?.(); }
   } catch { return null; }
 }
 
@@ -907,7 +918,7 @@ async function restoreText(text, zip = {}) {
     const bytes = zip[`photos/${id}.jpg`];
     const jpeg = bytes && await reencode(new Blob([bytes]));
     if (jpeg) receipts.push({ id, blob: jpeg }); else missing++;
-    ++decoded; if(decoded%10===0 || decoded===wanted.size)await backupStage(work, 'Checking receipt photos… {0} of {1}',decoded,wanted.size);else checkBackupWork(work);
+    ++decoded; if(isNative || decoded%10===0 || decoded===wanted.size)await backupStage(work, 'Checking receipt photos… {0} of {1}',decoded,wanted.size);else checkBackupWork(work);
   }
   if(missing && Object.keys(zip).length)throw new Error(t('Some receipt photos are missing or unreadable. Nothing was restored.'));
   if(missing && !(await confirmSheet({title:t('Receipt photos'),body:t('This JSON backup has receipt links but no photos. Restore entries without those photos?'),ok:t('Restore')})))return;
@@ -932,26 +943,50 @@ async function restoreText(text, zip = {}) {
 }
 
 /** The backup, as JSON, or with photos as a zip holding the same JSON plus photos/<id>.jpg. */
-async function backupBlob(withPhotos, { name, text, details } = backupFile(), txs = S.tx) {
+async function backupBlob(withPhotos, { name, text, details } = backupFile(), txs = S.tx, work = null) {
   const json = new TextEncoder().encode(text);
   if (!withPhotos) return { name, blob: new Blob([json], { type: 'application/json' }), missing: 0, jsonBytes: json.length, entries: 1, details: details && { ...details, photos: 0, protected: false } };
   const files = [{ name: BACKUP_JSON, data: json }];
   let missing = 0;
-  for (const id of new Set(txs.map(x => x.receiptId).filter(Boolean))) { const p = await getPhoto(id); if (p) files.push({ name: `photos/${id}.jpg`, data: new Uint8Array(await p.arrayBuffer()) }); else missing++; }
+  const ids = [...new Set(txs.map(x => x.receiptId).filter(Boolean))];
+  let collected = 0;
+  if (work) await backupStage(work, 'Collecting receipt photos… {0} of {1}', collected, ids.length);
+  for (const id of ids) {
+    const p = await getPhoto(id);
+    if (p) files.push({ name: `photos/${id}.jpg`, data: new Uint8Array(await p.arrayBuffer()) }); else missing++;
+    ++collected;
+    if (work) { if (collected % 10 === 0 || collected === ids.length) await backupStage(work, 'Collecting receipt photos… {0} of {1}', collected, ids.length); else checkBackupWork(work); }
+  }
+  if (work) await backupStage(work, 'Creating the backup ZIP…');
   return { name: name.replace(/\.json$/, '.zip'), blob: zipStore(files), missing, jsonBytes: json.length, entries: files.length, details: details && { ...details, photos: files.length - 1, missing, protected: false } };
 }
 /** The backup as the sheet asks: with or without photos, and sealed with its password when one is typed. Null: too short. */
-async function sealedBackup(r = null, pass = '#bk-pass', err = '#bk-err') {
-  const pw = $(pass)?.value || '';
-  if (!r) {   // this phone's backup: never one its own restore would refuse, reported as saved
-    r = await backupBlob($('#bk-photos')?.checked);
-    const big = !backupFits({ zip: r.name.endsWith('.zip'), fileBytes: r.blob.size, jsonBytes: r.jsonBytes, entries: r.entries });
-    if (big || overCap({ accounts: S.accounts, tx: S.tx, recurring: S.recurring, customCats: S.kv.customCats })) { $(err).textContent = t('This is more than a backup can restore. Leave out the photos, or remove some entries or bills first.'); return null; }
-  }
-  if (!pw) return r;
-  if (pw.length < 10) { $(err).textContent = t('Use at least 10 characters.'); $(pass).focus(); return null; }
-  const text = await sealBackup(new Uint8Array(await r.blob.arrayBuffer()), pw);
-  return { ...r, name: r.name.replace(/\.(json|zip)$/, '.locked.json'), blob: new Blob([text], { type: 'application/json' }), details: r.details && { ...r.details, protected: true } };
+async function sealedBackup(r = null, pass = '#bk-pass', err = '#bk-err', build = null) {
+  const pw = $(pass)?.value || '', withPhotos = $('#bk-photos')?.checked;
+  if (pw && pw.length < 10) { $(err).textContent = t('Use at least 10 characters.'); $(pass).focus(); return null; }
+  const owner = [...document.querySelectorAll('.scrim:not(.out) .sheet')].at(-1);
+  if (owner?.getAttribute('aria-busy') === 'true') return null;
+  const work = beginBackupWork('Back up');
+  const controls = [...work.owner.querySelectorAll('input,[data-act="bk-save"],[data-act="bk-share"],[data-act="jt-send"],[data-act="jt-save"]')].map(el=>({el,disabled:el.disabled}));
+  for (const {el} of controls) el.disabled = true;
+  try {
+    await backupStage(work, 'Preparing the backup…');
+    if (!r) {
+      r = build ? await build(work) : await backupBlob(withPhotos, undefined, S.tx, work);
+      if (!build) {
+        const big = !backupFits({ zip: r.name.endsWith('.zip'), fileBytes: r.blob.size, jsonBytes: r.jsonBytes, entries: r.entries });
+        if (big || overCap({ accounts: S.accounts, tx: S.tx, recurring: S.recurring, customCats: S.kv.customCats })) { $(err).textContent = t('This is more than a backup can restore. Leave out the photos, or remove some entries or bills first.'); return null; }
+      }
+    }
+    if (pw) {
+      await backupStage(work, 'Protecting the backup with your password…');
+      const text = await sealBackup(new Uint8Array(await r.blob.arrayBuffer()), pw);
+      r = { ...r, name: r.name.replace(/\.(json|zip)$/, '.locked.json'), blob: new Blob([text], { type: 'application/json' }), details: r.details && { ...r.details, protected: true } };
+    }
+    await backupStage(work, 'Backup file ready.');
+    return r;
+  } catch (e) { if (e?.cancelled) return null; throw e; }
+  finally { finishBackupWork(work); for (const {el,disabled} of controls) if(el.isConnected)el.disabled=disabled; }
 }
 /** Ask for a protected backup's password. → the password, or null (cancelled). */
 function askPassword() {
@@ -1411,8 +1446,8 @@ export const act = {
       <ul class="points">
         ${li(ICON.wallet, isNative ? t('Your book is saved in this app on this phone. Clearing browser data does not delete it. A computer you approve can view and edit it while connected. Tally keeps no cloud copy.') : t('Only on this phone, in the storage of the browser Tally runs in. It is not copied to a server or to your other devices: no one can bring it back, not even us.'))}
         ${li(ICON.check, t('What is kept: your accounts, entries, receipt photos, budgets, bills, categories and settings.'))}
-        ${li(ICON.alert, isNative ? t('Uninstalling Tally, clearing its app data, or resetting this phone deletes your entries, accounts and receipt photos. Back up first.') : t("Deleted by: uninstalling Tally, clearing the browser's data for Tally, cleaner apps, a phone reset."))}
-        ${iosBrowser() ? li(ICON.plusSquare, t("On iPhone, keep Tally on the Home Screen: Safari clears web apps it hasn't seen for 7 days.")) : ''}
+        ${li(ICON.alert, isNative ? t('Uninstalling Tally, clearing its app data, or resetting this phone deletes your entries, accounts and receipt photos. Back up first.') : t('Clearing the browser\'s data for Tally or resetting this phone deletes Tally\'s local book. Back up first.'))}
+        ${!isNative && iosBrowser() ? li(ICON.plusSquare, t("On iPhone, keep Tally on the Home Screen: Safari clears web apps it hasn't seen for 7 days.")) : ''}
         ${li(ICON.check, t('Safe: closing, restarting, updates, offline.'))}
         ${li(ICON.upload, t('New phone? Back up, then restore there.'))}
       </ul>
@@ -1427,7 +1462,7 @@ export const act = {
       <details class="more-cats"><summary>${ICON.lock}${esc(t('Protect with a password'))}</summary><label class="field"><span>${esc(t('Password (optional)'))}</span><input id="bk-pass" type="password" autocomplete="new-password" minlength="8"></label>
         <p class="fine">${esc(t("Without this password the file can't be opened, and no one can reset it. Use a long password: short ones can be guessed."))}</p><p class="err" id="bk-err" role="alert"></p></details>
       ${canShare ? `<button class="btn wide" data-act="bk-share">${esc(t('Send to myself (Google Drive, email, WhatsApp)'))}</button>` : ''}
-      <button class="btn ${canShare ? 'ghost ' : ''}wide" data-act="bk-save">${esc(t('Save to this phone (Downloads)'))}</button>
+      <button class="btn ${canShare ? 'ghost ' : ''}wide" data-act="bk-save">${esc((isNative ? t('Save to this phone') : t('Save to this phone (Downloads)')))}</button>
       <p class="fine">${esc(t('To restore on a new phone: open Tally there, tap Restore a Tally backup, and pick this file.'))}</p>`, { label: t('Back up') });
   },
   'bk-share': async () => {
@@ -1461,22 +1496,22 @@ export const act = {
       <p class="warnbox">${ICON.alert}<span class="grow">${esc(t('Anyone with this file can read it, including any receipt photos (they may show card numbers or names). Send it only to your partner, or add a password.'))}</span></p>
       <details class="more-cats"><summary>${ICON.lock}${esc(t('Protect with a password'))}</summary><label class="field"><span>${esc(t('Password (optional)'))}</span><input id="jt-pass" type="password" autocomplete="new-password" minlength="8"></label><p class="fine">${esc(t('Tell your partner the password another way (not in the same chat).'))}</p><p class="err" id="jt-err" role="alert"></p></details>
       ${canShare ? `<button class="btn wide" data-act="jt-send">${esc(t('Send to my partner (WhatsApp, email)'))}</button>` : ''}
-      <button class="btn ${canShare ? 'ghost ' : ''}wide" data-act="jt-save">${esc(t('Save to this phone (Downloads)'))}</button>
+      <button class="btn ${canShare ? 'ghost ' : ''}wide" data-act="jt-save">${esc((isNative ? t('Save to this phone') : t('Save to this phone (Downloads)')))}</button>
       <p class="fine">${esc(t('Your partner opens Tally, taps Settings → Import from my partner and picks this file. Newer edits win on both phones.'))} ${esc(t('Deleting an entry deletes it on the other phone too, once they import your next file.'))}</p>`, { label: t('Share joint accounts') });
   },
   'jt-send': async () => {
-    const r = await sealedBackup(await backupBlob($('#jt-photos')?.checked, jointFile(), jointTx()), '#jt-pass', '#jt-err'); if (!r) return;
+    const r = await sealedBackup(null, '#jt-pass', '#jt-err', work => backupBlob($('#jt-photos')?.checked, jointFile(), jointTx(), work)); if (!r) return;
     const { name, blob, missing } = r;
     try { if (!(await shareFile(name, blob, blob.type))) return act['jt-save'](); } catch (e) { if (e?.name === 'AbortError') return; throw e; }
     closeSheet(); toast(t('Sent {0}', name), { k: 'good', icon: 'check' }); warnMissingPhotos(missing);
   },
   'jt-save': async b => {
-    const r = await sealedBackup(await backupBlob($('#jt-photos')?.checked, jointFile(), jointTx()), '#jt-pass', '#jt-err'); if (!r) return;
+    const r = await sealedBackup(null, '#jt-pass', '#jt-err', work => backupBlob($('#jt-photos')?.checked, jointFile(), jointTx(), work)); if (!r) return;
     if (b) b.disabled = true;
     const { name, blob, missing } = r;
     const result = await download(name, blob, blob.type);
     if (isNative && result?.cancelled !== false) { if (b?.isConnected) b.disabled = false; return; }
-    closeSheet(); toast(t('Download started. Check your Downloads folder for {0}.', name), { k: 'good', icon: 'check' }); warnMissingPhotos(missing);
+    closeSheet(); toast(isNative ? `${t('Saved')}: ${name}` : t('Download started. Check your Downloads folder for {0}.', name), { k: 'good', icon: 'check' }); warnMissingPhotos(missing);
   },
   'export-csv': () => download(`tally-${today()}.csv`, toCSV(S.tx, S.accounts, catName), 'text/csv'),
   // Every entry in formats other apps open, so nobody is tied to Tally. Tally reads each of them back too.
@@ -1514,7 +1549,7 @@ export const act = {
     const what = h => (h === location.host ? t("Tally's own files (the app itself)") : /(^|\.)google(usercontent)?\.com$/.test(h) ? t('Google: feedback you sent or a Sheets link you pasted') : h === 'api.frankfurter.dev' ? t('Exchange rate you asked for (no money data sent)') : t('Not expected: please tell us'));
     const hosts = [...new Set(performance.getEntriesByType('resource').concat(performance.getEntriesByType('navigation')).map(e => { try { return new URL(e.name).host; } catch { return ''; } }).filter(Boolean))];
     openSheet(`<div class="sheethead"><h2 class="sh-title">${esc(t('Check it yourself'))}</h2><button class="icon-btn" data-act="sheet-close" aria-label="${esc(t('Close'))}">${ICON.x}</button></div>
-      <p class="sh-body">${esc(t('Every address this page has fetched since it opened, as recorded by your browser (links you open in a new tab, like Google Calendar, are not in it):'))}</p>
+      <p class="sh-body">${esc((isNative ? t('Network requests recorded by this app since it opened (external links, such as Google Calendar, are not included):') : t('Every address this page has fetched since it opened, as recorded by your browser (links you open in a new tab, like Google Calendar, are not in it):')))}</p>
       ${hosts.every(h => h === location.host) ? `<p class="okbox">${esc(t("Only Tally's own website. Nothing else."))}</p>` : ''}
       ${isNative ? '<p class="fine">'+esc(t('This list shows downloaded pages and files. A computer connection uses a separate encrypted channel and is not shown here.'))+'</p>' : ''}
       <ul class="list">${hosts.map(h => `<li><span class="grow"><b>${esc(h)}</b><small>${esc(what(h))}</small></span></li>`).join('')}</ul>
@@ -1522,7 +1557,7 @@ export const act = {
       <p class="fine"><a class="link" href="https://github.com/tallymy/tallymy.github.io" target="_blank" rel="noopener">${esc(t('Tally is open source: anyone can read the code on GitHub.'))}</a></p>`, { label: t('Check it yourself') });
   },
   'erase': async () => {
-    if (!(await confirmSheet({ title: t("Erase all of Tally's data?"), body: t('This deletes only Tally\'s own data: your accounts, entries, receipt photos, budgets, bills, categories and settings, kept in the storage of the browser Tally runs in on this phone. Other apps, your gallery, your files and the rest of the phone are not touched. It cannot be undone. Back up first if you might want them.'), ok: t("Erase Tally's data"), danger: true }))) return;
+    if (!(await confirmSheet({ title: t("Erase all of Tally's data?"), body: (isNative ? t('This deletes your accounts, entries, receipt photos, budgets, bills, categories and settings stored in this app on this phone. Other apps, your gallery and files are not touched. It cannot be undone. Back up first.') : t('This deletes only Tally\'s own data: your accounts, entries, receipt photos, budgets, bills, categories and settings, kept in the storage of the browser Tally runs in on this phone. Other apps, your gallery, your files and the rest of the phone are not touched. It cannot be undone. Back up first if you might want them.')), ok: t("Erase Tally's data"), danger: true }))) return;
     await eraseAll(); location.hash = '#/welcome'; location.reload();   // a fresh page: drafts, queues and Undo from before can't write back
   },
 };

@@ -1,5 +1,11 @@
 // 日本語 (Japanese). Keys are the English text in the code (t('...')); tests/i18n.test.mjs fails if one is missing.
 export default {
+"Preparing the backup…": "バックアップを準備しています…",
+"Collecting receipt photos… {0} of {1}": "レシート写真を集めています… {0}/{1}",
+"Creating the backup ZIP…": "バックアップ ZIP を作成しています…",
+"Protecting the backup with your password…": "パスワードでバックアップを保護しています…",
+"Backup file ready.": "バックアップファイルの準備ができました。",
+
   "Connect to computer": "パソコンに接続",
   "(guessed, check)": "（推測です。確認してください）",
   "(no name)": "（名前なし）",
@@ -1996,5 +2002,13 @@ export default {
 "{0} rows have unknown transaction types and were left out.": "{0} 行は取引の種類を認識できないため除外しました。",
 "This backup has an unreadable account currency. Nothing was imported.": "このバックアップの口座通貨を認識できません。何もインポートしていません。",
 "This imported account differs from the account already here. Nothing was imported.": "インポートする口座が既存の口座と異なります。何もインポートしていません。",
-"This Money Manager backup has transfers between different currencies that cannot be read safely. Nothing was imported.": "この Money Manager バックアップには、異なる通貨間の振替があり、安全に読み取れません。何もインポートしていません。"
+"This Money Manager backup has transfers between different currencies that cannot be read safely. Nothing was imported.": "この Money Manager バックアップには、異なる通貨間の振替があり、安全に読み取れません。何もインポートしていません。",
+"Your book is stored in this app on this phone. Back up before uninstalling Tally or clearing its app data.": "帳簿はこのスマホのアプリ内に保存されています。Tally のアンインストールやアプリデータの削除前に、バックアップしてください。",
+"Stored in this app on this phone. Keep a backup file outside Tally.": "このスマホのアプリ内に保存されています。バックアップファイルは Tally の外に保管してください。",
+"This deletes your accounts, entries, receipt photos, budgets, bills, categories and settings stored in this app on this phone. Other apps, your gallery and files are not touched. It cannot be undone. Back up first.": "このスマホのアプリ内に保存された口座、記録、レシート写真、予算、請求、カテゴリ、設定を削除します。他のアプリ、ギャラリー、ファイルには影響しません。元に戻せないため、先にバックアップしてください。",
+"Local storage is limited. Keep a backup file and avoid adding receipt photos for now.": "ローカル保存に制限があります。バックアップファイルを保管し、当面はレシート写真の追加を控えてください。",
+"Save to this phone": "このスマホに保存",
+"Network requests recorded by this app since it opened (external links, such as Google Calendar, are not included):": "このアプリを開いてから記録されたネットワーク要求（Google カレンダーなどの外部リンクは含みません）：",
+"Clearing the browser's data for Tally or resetting this phone deletes Tally's local book. Back up first.": "ブラウザの Tally データを削除したり、このスマホを初期化したりすると、Tally のローカル帳簿が削除されます。先にバックアップしてください。",
+"Your book is stored in this browser on this device. Clearing Tally's site data deletes it. Keep a backup file.": "帳簿はこの端末のブラウザ内に保存されています。Tally のサイトデータを削除すると帳簿も削除されます。バックアップファイルを保管してください。"
 };

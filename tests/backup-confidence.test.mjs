@@ -41,6 +41,7 @@ test('actual backup builder counts included photos and carries protection withou
  const context=vm.createContext({S:{tx:[{receiptId:'one'},{receiptId:'missing'},{receiptId:'one'}],accounts:[],recurring:[],kv:{}},TextEncoder,Blob,Uint8Array,
  backupFile:()=>({name:'book.json',text:'{}',details:{transactions:4,generation:'bookA'}}),getPhoto:async id=>id==='one'?new Blob(['photo']):null,
  BACKUP_JSON:'backup.json',zipStore:files=>new Blob(files.map(x=>x.data)),backupFits:()=>true,overCap:()=>false,
+ document:{querySelectorAll:()=>[]},beginBackupWork:()=>({owner:{querySelectorAll:()=>[]}}),backupStage:async()=>{},checkBackupWork(){},finishBackupWork(){},
  $:id=>id==='#bk-photos'?{checked:true}:id==='#bk-pass'?{value:'secret-123456'}:{},sealBackup:async()=>'{"protected":true}',t:fmt});
  vm.runInContext(builders+'\nglobalThis.api={sealedBackup,backupBlob};',context);
  const zip=await context.api.sealedBackup();assert.equal(zip.details.photos,1);assert.equal(zip.details.missing,1);assert.equal(zip.details.protected,true);assert.equal(zip.details.transactions,4);

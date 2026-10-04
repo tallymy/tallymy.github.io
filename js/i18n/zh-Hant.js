@@ -1,6 +1,12 @@
 // 繁體中文 (Traditional Chinese). First made from zh.js by tests/fixtures/make-hant.mjs, since then reviewed and edited by hand:
 // edit this file directly (running make-hant again would undo the review).
 export default {
+"Preparing the backup…": "正在準備備份…",
+"Collecting receipt photos… {0} of {1}": "正在收集收據照片… {0}/{1}",
+"Creating the backup ZIP…": "正在建立備份 ZIP…",
+"Protecting the backup with your password…": "正在使用密碼保護備份…",
+"Backup file ready.": "備份檔案已準備好。",
+
   "Connect to computer": "連接電腦",
   "(guessed, check)": "（推測，請核對）",
   "(no name)": "（無名稱）",
@@ -1996,5 +2002,13 @@ export default {
 "{0} rows have unknown transaction types and were left out.": "{0} 列的交易類型無法識別，已略過。",
 "This backup has an unreadable account currency. Nothing was imported.": "此備份中的帳戶貨幣無法識別。未匯入任何資料。",
 "This imported account differs from the account already here. Nothing was imported.": "要匯入的帳戶與現有帳戶不同。未匯入任何資料。",
-"This Money Manager backup has transfers between different currencies that cannot be read safely. Nothing was imported.": "此 Money Manager 備份包含不同貨幣之間的轉帳，無法安全讀取。未匯入任何資料。"
+"This Money Manager backup has transfers between different currencies that cannot be read safely. Nothing was imported.": "此 Money Manager 備份包含不同貨幣之間的轉帳，無法安全讀取。未匯入任何資料。",
+"Your book is stored in this app on this phone. Back up before uninstalling Tally or clearing its app data.": "帳本儲存在這部手機的應用程式內。解除安裝 Tally 或清除應用程式資料前，請先備份。",
+"Stored in this app on this phone. Keep a backup file outside Tally.": "儲存在這部手機的應用程式內。請在 Tally 以外另存備份檔案。",
+"This deletes your accounts, entries, receipt photos, budgets, bills, categories and settings stored in this app on this phone. Other apps, your gallery and files are not touched. It cannot be undone. Back up first.": "這會刪除這部手機應用程式內儲存的帳戶、記錄、收據照片、預算、帳單、分類和設定。其他應用程式、相簿和檔案不受影響。此操作無法復原，請先備份。",
+"Local storage is limited. Keep a backup file and avoid adding receipt photos for now.": "本機儲存空間受限。請保留備份檔案，並暫時不要新增收據照片。",
+"Save to this phone": "儲存到這部手機",
+"Network requests recorded by this app since it opened (external links, such as Google Calendar, are not included):": "本應用程式開啟以來記錄的網路請求（不包括 Google 日曆等外部連結）：",
+"Clearing the browser's data for Tally or resetting this phone deletes Tally's local book. Back up first.": "清除瀏覽器中的 Tally 資料或重設這部手機，會刪除 Tally 的本機帳本。請先備份。",
+"Your book is stored in this browser on this device. Clearing Tally's site data deletes it. Keep a backup file.": "帳本儲存在這台裝置的瀏覽器中。清除 Tally 的網站資料會刪除帳本，請保留備份檔案。"
 };

@@ -1,5 +1,11 @@
 // தமிழ் (Tamil). Keys are the English text in the code; {0} {1} are filled in by t().
 export default {
+"Preparing the backup…": "காப்புப்பிரதியைத் தயாரிக்கிறது…",
+"Collecting receipt photos… {0} of {1}": "ரசீது படங்களைச் சேகரிக்கிறது… {1}-இல் {0}",
+"Creating the backup ZIP…": "காப்புப்பிரதி ZIP-ஐ உருவாக்குகிறது…",
+"Protecting the backup with your password…": "உங்கள் கடவுச்சொல்லால் காப்புப்பிரதியைப் பாதுகாக்கிறது…",
+"Backup file ready.": "காப்புப்பிரதி கோப்பு தயார்.",
+
   "Connect to computer": "கணினியுடன் இணைக்கவும்",
   "(guessed, check)": "(ஊகம், சரிபாருங்கள்)",
   "(no name)": "(பெயர் இல்லை)",
@@ -1996,5 +2002,13 @@ export default {
 "{0} rows have unknown transaction types and were left out.": "{0} வரிகளில் பரிவர்த்தனை வகையை அடையாளம் காண முடியாததால் அவை விடப்பட்டன.",
 "This backup has an unreadable account currency. Nothing was imported.": "இந்தக் காப்புப்பிரதியில் கணக்கின் நாணயத்தை அடையாளம் காண முடியவில்லை. எதுவும் இறக்குமதி செய்யப்படவில்லை.",
 "This imported account differs from the account already here. Nothing was imported.": "இறக்குமதி செய்யும் கணக்கு ஏற்கெனவே உள்ள கணக்கிலிருந்து வேறுபடுகிறது. எதுவும் இறக்குமதி செய்யப்படவில்லை.",
-"This Money Manager backup has transfers between different currencies that cannot be read safely. Nothing was imported.": "இந்த Money Manager காப்புப்பிரதியில் வெவ்வேறு நாணயங்களுக்கு இடையிலான பரிமாற்றங்களைப் பாதுகாப்பாகப் படிக்க முடியவில்லை. எதுவும் இறக்குமதி செய்யப்படவில்லை."
+"This Money Manager backup has transfers between different currencies that cannot be read safely. Nothing was imported.": "இந்த Money Manager காப்புப்பிரதியில் வெவ்வேறு நாணயங்களுக்கு இடையிலான பரிமாற்றங்களைப் பாதுகாப்பாகப் படிக்க முடியவில்லை. எதுவும் இறக்குமதி செய்யப்படவில்லை.",
+"Your book is stored in this app on this phone. Back up before uninstalling Tally or clearing its app data.": "உங்கள் கணக்குப் புத்தகம் இந்தக் கைப்பேசியின் செயலியில் சேமிக்கப்பட்டுள்ளது. Tally-ஐ நிறுவல் நீக்கும் முன்போ அதன் செயலித் தரவை அழிக்கும் முன்போ காப்புப்பிரதி எடுங்கள்.",
+"Stored in this app on this phone. Keep a backup file outside Tally.": "இந்தக் கைப்பேசியின் செயலியில் சேமிக்கப்படுகிறது. காப்புப்பிரதிக் கோப்பை Tally-க்கு வெளியே வைத்திருங்கள்.",
+"This deletes your accounts, entries, receipt photos, budgets, bills, categories and settings stored in this app on this phone. Other apps, your gallery and files are not touched. It cannot be undone. Back up first.": "இந்தக் கைப்பேசியின் செயலியில் சேமிக்கப்பட்ட கணக்குகள், பதிவுகள், ரசீதுப் படங்கள், பட்ஜெட்டுகள், பில்கள், வகைகள், அமைப்புகள் நீக்கப்படும். பிற செயலிகள், கேலரி, கோப்புகள் பாதிக்கப்படாது. இதை மீட்டமைக்க முடியாது. முதலில் காப்புப்பிரதி எடுங்கள்.",
+"Local storage is limited. Keep a backup file and avoid adding receipt photos for now.": "உள்ளகச் சேமிப்பில் வரம்புகள் உள்ளன. காப்புப்பிரதிக் கோப்பை வைத்திருங்கள்; இப்போது ரசீதுப் படங்களைச் சேர்ப்பதைத் தவிர்க்கவும்.",
+"Save to this phone": "இந்தக் கைப்பேசியில் சேமி",
+"Network requests recorded by this app since it opened (external links, such as Google Calendar, are not included):": "இந்தச் செயலியைத் திறந்ததிலிருந்து பதிவான பிணையக் கோரிக்கைகள் (Google Calendar போன்ற வெளி இணைப்புகள் இதில் இல்லை):",
+"Clearing the browser's data for Tally or resetting this phone deletes Tally's local book. Back up first.": "உலாவியில் Tally-இன் தரவை அழித்தாலோ இந்தக் கைப்பேசியை மீட்டமைத்தாலோ Tally-இன் உள்ளகக் கணக்குப் புத்தகம் நீக்கப்படும். முதலில் காப்புப்பிரதி எடுங்கள்.",
+"Your book is stored in this browser on this device. Clearing Tally's site data deletes it. Keep a backup file.": "உங்கள் கணக்குப் புத்தகம் இந்தச் சாதனத்தின் உலாவியில் சேமிக்கப்பட்டுள்ளது. Tally-இன் தளத் தரவை அழித்தால் அதுவும் நீக்கப்படும். காப்புப்பிரதிக் கோப்பை வைத்திருங்கள்."
 };
