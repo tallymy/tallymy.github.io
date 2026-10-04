@@ -385,7 +385,7 @@ export const homeView = {
     const row = document.querySelector(`.txrow[data-id="${CSS.escape(id)}"]`); if (row) row.dataset.new = '';
     if (!was) return;
     const big = $('.hero .big'), sp = $('.card.month .spent'), arc = $('.ring .arc');
-    if (was.bal != null && drawn.bal != null && was.bal !== drawn.bal) { countUp(big, was.bal, drawn.bal); replay(big, 'land'); }
+    if (was.hero === drawn.hero && was.bal != null && drawn.bal != null && was.bal !== drawn.bal) { countUp(big, was.bal, drawn.bal); replay(big, 'land'); }
     if (was.spent !== drawn.spent) { countUp(sp, was.spent, drawn.spent); replay(sp, 'land'); }
     if (arc && was.frac != null && was.frac !== drawn.frac) {   // from where it was to where it is now (CSS transition)
       arc.style.setProperty('--f', (was.frac * 100).toFixed(1)); void arc.getBoundingClientRect();
@@ -407,7 +407,8 @@ export const homeView = {
     const word = p && (spent > B ? t('Over budget') : p.over ? t('Heading over') : t('On track'));
     const rg = ring({ budget: B, spent, before, p });
     const hide = balHidden(), own = accts.filter(a => !owing(a));   // Owed to you and You owe count in the total; they show in their own cards
-    drawn ={ bal: hide ? null : bal.total, spent, frac: rg?.frac };
+    const balanceAccounts = own.filter(a => !offTotal(a) && !unset.includes(a)).length;
+    drawn ={ hero: balanceAccounts ? 'balance' : 'week', bal: balanceAccounts ? (hide ? null : bal.total) : weekSpent(upToday, tdy), spent, frac: rg?.frac };
     // Last week on the first days of a new one, else now and then a nice find (one delight card at a time).
     const fresh = S.tx.length < NEW, ws = settings().weekStart === 0 ? 0 : 1, rc = !fresh && shown('insight') && cached(weekRecap, upToday, tdy, ws);
     const recap = rc && !dismissed().includes(`wk-${rc.start}`) ? recapCard(rc) : '';

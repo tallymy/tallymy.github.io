@@ -41,7 +41,7 @@ export const PRESETS = [
   // "Id/No, Date, Category, Amount, Currency, Note, Wallet". Transfers are the categories "Outgoing Transfer" and
   // "Incoming Transfer" (Money Lover's default category list, e.g. github.com/ITBoiz-FPT-K16/money_care categories.js);
   // the other wallet is not named, so the two halves are paired by amount and day.
-  { id: 'moneylover', signed: true, name: 'Money Lover', need: ['category', 'amount', 'currency', 'note', ['wallet', 'account'], ['id', 'no', 'exclude report', 'event']],
+  { id: 'moneylover', signed: true, mdy: false, name: 'Money Lover', need: ['category', 'amount', 'currency', 'note', ['wallet', 'account'], ['id', 'no', 'exclude report', 'event']],
     cols: { date: ['date'], amount: ['amount'], category: ['category'], merchant: ['note'], account: ['wallet', 'account'] },
     transfer: c => /^(outgoing|incoming) transfer$/.test(low(c.get('category'))),
     // "Adjust Balance" rows (and anything marked Exclude Report) are corrections, not spending; so is "Initial balance".
@@ -54,7 +54,7 @@ export const PRESETS = [
   // halves of a transfer are paired across the files' rows by amount and time.
   { id: 'spendee', name: 'Spendee', need: ['wallet', 'type', 'category name', 'amount', 'currency'],
     cols: { date: ['date'], account: ['wallet'], type: ['type'], category: ['category name'], amount: ['amount'], merchant: ['note'] },
-    transfer: c => /transfer/.test(low(c.get('type'))) },
+    transfer: c => { const m = low(c.get('type')).match(/^(outgoing|incoming) transfer$/); return m && { dir: m[1] === 'outgoing' ? 'out' : 'in' }; } },
 
   // Wallet by BudgetBakers, "Export all data" CSV: semicolons; account;category;currency;amount;ref_currency_amount;
   // type;payment_type;payment_type_local;note;date;…;transfer;payee;labels;… with signed amounts, type Income /
@@ -117,7 +117,7 @@ export const PRESETS = [
   // To subcategory, Amount 1, Currency 1, Amount 2, Currency 2, Commission, …, Comment", UTC times. Money goes from →
   // to, so an Income row names its category in From and the account in To ("Income, Company Payroll, Primary Account":
   // github.com/fxprima/finance-tracker example-dummy-data/mony-format-dummy.csv, CSVFormatValidator.java).
-  { id: 'onemoney', name: '1Money', need: ['date (utc)', 'type', 'from account / from category', 'to account / to category', 'amount 1'],
+  { id: 'onemoney', name: '1Money', utc: true, need: ['date (utc)', 'type', 'from account / from category', 'to account / to category', 'amount 1'],
     cols: { date: ['date (utc)'], type: ['type'], account: ['from account / from category'], category: ['to account / to category'], amount: ['amount 1'], note: ['comment'] },
     account: c => (low(c.get('type')) === 'income' ? c.get('category') : c.get('account')),
     category: c => (low(c.get('type')) === 'income' ? c.get('account') : c.get('category')),

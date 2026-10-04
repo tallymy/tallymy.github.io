@@ -1,0 +1,637 @@
+{
+  "auditedSource": "D:/tally-native",
+  "provenancePolicy": "Do not upgrade synthetic evidence to real-export verification without an app-generated nonprivate fixture, app version, export path, format and expected field reconciliation.",
+  "entries": [
+    {
+      "app": "Tally",
+      "id": "tally",
+      "format": "Tally CSV",
+      "parser": "js/presets.js detectPreset → js/io.js rowsToTx",
+      "requiredHeaders": [
+        "date",
+        "type",
+        "amount",
+        "account",
+        "to account",
+        "category",
+        "merchant",
+        "item"
+      ],
+      "mappedFields": [
+        "date",
+        "time",
+        "type",
+        "amount",
+        "account",
+        "category",
+        "merchant",
+        "note",
+        "sub"
+      ],
+      "fixtures": [
+        "tests/presets.test.mjs: Tally generated roundtrip"
+      ],
+      "tests": "tests/presets.test.mjs",
+      "evidence": "Generated own-format roundtrip",
+      "actualExportVerified": false,
+      "subcategories": true,
+      "receiptPhotos": false,
+      "unsupportedFields": [
+        "Third-party JSON/full backup",
+        "Receipt photos",
+        "Recurring rules/budgets/settings"
+      ]
+    },
+    {
+      "app": "QIF / OFX",
+      "id": "qif",
+      "format": "QIF / OFX",
+      "parser": "js/presets.js detectPreset → js/io.js rowsToTx",
+      "requiredHeaders": [
+        "date",
+        "amount",
+        "payee",
+        "category",
+        "memo",
+        "qif account"
+      ],
+      "mappedFields": [
+        "date",
+        "amount",
+        "merchant",
+        "category",
+        "note",
+        "account"
+      ],
+      "fixtures": [
+        "tests/presets.test.mjs: generated QIF/OFX"
+      ],
+      "tests": "tests/presets.test.mjs",
+      "evidence": "Synthetic fixtures / published-source schema references; no checked-in actual app export verified",
+      "actualExportVerified": false,
+      "subcategories": false,
+      "receiptPhotos": false,
+      "unsupportedFields": [
+        "Third-party JSON/full backup",
+        "Receipt photos",
+        "Recurring rules/budgets/settings"
+      ]
+    },
+    {
+      "app": "Money Manager (Realbyte)",
+      "id": "realbyte",
+      "format": "Recognized CSV / .xlsx column layout",
+      "parser": "js/presets.js detectPreset → js/io.js rowsToTx",
+      "requiredHeaders": [
+        [
+          "period",
+          "date"
+        ],
+        [
+          "accounts",
+          "account"
+        ],
+        "category",
+        "subcategory",
+        "income/expense"
+      ],
+      "mappedFields": [
+        "date",
+        "account",
+        "category",
+        "sub",
+        "merchant",
+        "note",
+        "amount",
+        "type"
+      ],
+      "fixtures": [
+        "tests/fixtures/make.mjs: realbyteRows/xlsx"
+      ],
+      "tests": "tests/presets.test.mjs",
+      "evidence": "Synthetic fixtures / published-source schema references; no checked-in actual app export verified",
+      "actualExportVerified": false,
+      "subcategories": true,
+      "receiptPhotos": false,
+      "unsupportedFields": [
+        "Third-party JSON/full backup",
+        "Receipt photos",
+        "Recurring rules/budgets/settings"
+      ]
+    },
+    {
+      "app": "Money Lover",
+      "id": "moneylover",
+      "format": "Recognized CSV / .xlsx column layout",
+      "parser": "js/presets.js detectPreset → js/io.js rowsToTx",
+      "requiredHeaders": [
+        "category",
+        "amount",
+        "currency",
+        "note",
+        [
+          "wallet",
+          "account"
+        ],
+        [
+          "id",
+          "no",
+          "exclude report",
+          "event"
+        ]
+      ],
+      "mappedFields": [
+        "date",
+        "amount",
+        "category",
+        "merchant",
+        "account"
+      ],
+      "fixtures": [
+        "tests/fixtures/moneylover.csv",
+        "tests/fixtures/make.mjs: moneyLoverOldRows/xlsx"
+      ],
+      "tests": "tests/presets.test.mjs",
+      "evidence": "Synthetic fixtures / published-source schema references; no checked-in actual app export verified",
+      "actualExportVerified": false,
+      "subcategories": false,
+      "receiptPhotos": false,
+      "unsupportedFields": [
+        "Third-party JSON/full backup",
+        "Receipt photos",
+        "Recurring rules/budgets/settings",
+        "Event and Exclude Report are not preserved as attributes; exclusion rows treated as corrections."
+      ]
+    },
+    {
+      "app": "Spendee",
+      "id": "spendee",
+      "format": "Recognized CSV / .xlsx column layout",
+      "parser": "js/presets.js detectPreset → js/io.js rowsToTx",
+      "requiredHeaders": [
+        "wallet",
+        "type",
+        "category name",
+        "amount",
+        "currency"
+      ],
+      "mappedFields": [
+        "date",
+        "account",
+        "type",
+        "category",
+        "amount",
+        "merchant"
+      ],
+      "fixtures": [
+        "tests/fixtures/spendee.csv"
+      ],
+      "tests": "tests/presets.test.mjs",
+      "evidence": "Synthetic fixtures / published-source schema references; no checked-in actual app export verified",
+      "actualExportVerified": false,
+      "subcategories": false,
+      "receiptPhotos": false,
+      "unsupportedFields": [
+        "Third-party JSON/full backup",
+        "Receipt photos",
+        "Recurring rules/budgets/settings",
+        "Labels and Author omitted; transfer pairing relies on matching legs."
+      ]
+    },
+    {
+      "app": "Wallet by BudgetBakers",
+      "id": "wallet",
+      "format": "Recognized CSV / .xlsx column layout",
+      "parser": "js/presets.js detectPreset → js/io.js rowsToTx",
+      "requiredHeaders": [
+        "account",
+        "category",
+        "amount",
+        "ref_currency_amount",
+        "type",
+        "transfer"
+      ],
+      "mappedFields": [
+        "date",
+        "account",
+        "category",
+        "amount",
+        "type",
+        "merchant",
+        "note"
+      ],
+      "fixtures": [
+        "tests/fixtures/wallet.csv"
+      ],
+      "tests": "tests/presets.test.mjs",
+      "evidence": "Synthetic fixtures / published-source schema references; no checked-in actual app export verified",
+      "actualExportVerified": false,
+      "subcategories": false,
+      "receiptPhotos": false,
+      "unsupportedFields": [
+        "Third-party JSON/full backup",
+        "Receipt photos",
+        "Recurring rules/budgets/settings",
+        "Labels/payment metadata/reference currency values omitted."
+      ]
+    },
+    {
+      "app": "Monefy",
+      "id": "monefy",
+      "format": "Recognized CSV / .xlsx column layout",
+      "parser": "js/presets.js detectPreset → js/io.js rowsToTx",
+      "requiredHeaders": [
+        "date",
+        "account",
+        "category",
+        "amount",
+        "converted amount",
+        "description"
+      ],
+      "mappedFields": [
+        "date",
+        "account",
+        "category",
+        "amount",
+        "merchant"
+      ],
+      "fixtures": [
+        "tests/fixtures/monefy.csv"
+      ],
+      "tests": "tests/presets.test.mjs",
+      "evidence": "Synthetic fixtures / published-source schema references; no checked-in actual app export verified",
+      "actualExportVerified": false,
+      "subcategories": false,
+      "receiptPhotos": false,
+      "unsupportedFields": [
+        "Third-party JSON/full backup",
+        "Receipt photos",
+        "Recurring rules/budgets/settings",
+        "Converted currency columns omitted."
+      ]
+    },
+    {
+      "app": "YNAB",
+      "id": "ynab",
+      "format": "Recognized CSV / .xlsx column layout",
+      "parser": "js/presets.js detectPreset → js/io.js rowsToTx",
+      "requiredHeaders": [
+        "account",
+        "date",
+        "payee",
+        "outflow",
+        "inflow"
+      ],
+      "mappedFields": [
+        "date",
+        "account",
+        "merchant",
+        "category",
+        "note",
+        "debit",
+        "credit"
+      ],
+      "fixtures": [
+        "tests/fixtures/ynab_register.csv"
+      ],
+      "tests": "tests/presets.test.mjs",
+      "evidence": "Synthetic fixtures / published-source schema references; no checked-in actual app export verified",
+      "actualExportVerified": false,
+      "subcategories": false,
+      "receiptPhotos": false,
+      "unsupportedFields": [
+        "Third-party JSON/full backup",
+        "Receipt photos",
+        "Recurring rules/budgets/settings",
+        "Flags, cleared state and budget allocations omitted."
+      ]
+    },
+    {
+      "app": "Cashew",
+      "id": "cashew",
+      "format": "Recognized CSV / .xlsx column layout",
+      "parser": "js/presets.js detectPreset → js/io.js rowsToTx",
+      "requiredHeaders": [
+        "account",
+        "amount",
+        "title",
+        "date",
+        "income",
+        "category name"
+      ],
+      "mappedFields": [
+        "date",
+        "account",
+        "amount",
+        "category",
+        "sub",
+        "merchant",
+        "note"
+      ],
+      "fixtures": [
+        "tests/fixtures/cashew.csv"
+      ],
+      "tests": "tests/presets.test.mjs",
+      "evidence": "Synthetic fixtures / published-source schema references; no checked-in actual app export verified",
+      "actualExportVerified": false,
+      "subcategories": true,
+      "receiptPhotos": false,
+      "unsupportedFields": [
+        "Third-party JSON/full backup",
+        "Receipt photos",
+        "Recurring rules/budgets/settings",
+        "CSV color/icon/emoji/budget/objective omitted; SQLite subcategories/photos/plans not carried."
+      ]
+    },
+    {
+      "app": "Bluecoins",
+      "id": "bluecoins",
+      "format": "Recognized CSV / .xlsx column layout",
+      "parser": "js/presets.js detectPreset → js/io.js rowsToTx",
+      "requiredHeaders": [
+        "type",
+        "date",
+        "amount",
+        "exchange rate",
+        "category group",
+        "category",
+        "account"
+      ],
+      "mappedFields": [
+        "date",
+        "type",
+        "merchant",
+        "amount",
+        "category",
+        "account",
+        "note"
+      ],
+      "fixtures": [
+        "tests/fixtures/bluecoins.csv"
+      ],
+      "tests": "tests/presets.test.mjs",
+      "evidence": "Synthetic fixtures / published-source schema references; no checked-in actual app export verified",
+      "actualExportVerified": false,
+      "subcategories": false,
+      "receiptPhotos": false,
+      "unsupportedFields": [
+        "Third-party JSON/full backup",
+        "Receipt photos",
+        "Recurring rules/budgets/settings",
+        "Category Group, labels, status and Exchange Rate not carried as source fields."
+      ]
+    },
+    {
+      "app": "1Money",
+      "id": "onemoney",
+      "format": "Recognized CSV / .xlsx column layout",
+      "parser": "js/presets.js detectPreset → js/io.js rowsToTx",
+      "requiredHeaders": [
+        "date",
+        "type",
+        "from account",
+        "to account / to category",
+        "amount"
+      ],
+      "mappedFields": [
+        "date",
+        "type",
+        "account",
+        "category",
+        "amount",
+        "note"
+      ],
+      "fixtures": [
+        "tests/fixtures/onemoney.csv",
+        "tests/fixtures/onemoney_utc.csv"
+      ],
+      "tests": "tests/presets.test.mjs",
+      "evidence": "Synthetic fixtures / published-source schema references; no checked-in actual app export verified",
+      "actualExportVerified": false,
+      "subcategories": false,
+      "receiptPhotos": false,
+      "unsupportedFields": [
+        "Third-party JSON/full backup",
+        "Receipt photos",
+        "Recurring rules/budgets/settings",
+        "From/To subcategories, commission and secondary currency/amount not preserved by preset."
+      ]
+    },
+    {
+      "app": "1Money",
+      "id": "onemoney",
+      "format": "Recognized CSV / .xlsx column layout",
+      "parser": "js/presets.js detectPreset → js/io.js rowsToTx",
+      "requiredHeaders": [
+        "date (utc)",
+        "type",
+        "from account / from category",
+        "to account / to category",
+        "amount 1"
+      ],
+      "mappedFields": [
+        "date",
+        "type",
+        "account",
+        "category",
+        "amount",
+        "note"
+      ],
+      "fixtures": [
+        "tests/fixtures/onemoney.csv",
+        "tests/fixtures/onemoney_utc.csv"
+      ],
+      "tests": "tests/presets.test.mjs",
+      "evidence": "Synthetic fixtures / published-source schema references; no checked-in actual app export verified",
+      "actualExportVerified": false,
+      "subcategories": false,
+      "receiptPhotos": false,
+      "unsupportedFields": [
+        "Third-party JSON/full backup",
+        "Receipt photos",
+        "Recurring rules/budgets/settings",
+        "From/To subcategories, commission and secondary currency/amount not preserved by preset."
+      ]
+    },
+    {
+      "app": "Toshl",
+      "id": "toshl",
+      "format": "Recognized CSV / .xlsx column layout",
+      "parser": "js/presets.js detectPreset → js/io.js rowsToTx",
+      "requiredHeaders": [
+        "date",
+        "account",
+        "category",
+        "expense amount",
+        "income amount"
+      ],
+      "mappedFields": [
+        "date",
+        "account",
+        "category",
+        "debit",
+        "credit",
+        "merchant"
+      ],
+      "fixtures": [
+        "tests/fixtures/toshl.csv"
+      ],
+      "tests": "tests/presets.test.mjs",
+      "evidence": "Synthetic fixtures / published-source schema references; no checked-in actual app export verified",
+      "actualExportVerified": false,
+      "subcategories": false,
+      "receiptPhotos": false,
+      "unsupportedFields": [
+        "Third-party JSON/full backup",
+        "Receipt photos",
+        "Recurring rules/budgets/settings",
+        "Tags omitted; In main currency may be used for non-main-currency amount."
+      ]
+    },
+    {
+      "app": "AndroMoney",
+      "id": "andromoney",
+      "format": "Recognized CSV / .xlsx column layout",
+      "parser": "js/presets.js detectPreset → js/io.js rowsToTx",
+      "requiredHeaders": [
+        "amount",
+        "category",
+        "date",
+        "expense(transfer out)",
+        "income(transfer in)"
+      ],
+      "mappedFields": [
+        "date",
+        "amount",
+        "category",
+        "account",
+        "merchant",
+        "note",
+        "time"
+      ],
+      "fixtures": [
+        "tests/fixtures/andromoney.csv"
+      ],
+      "tests": "tests/presets.test.mjs",
+      "evidence": "Synthetic fixtures / published-source schema references; no checked-in actual app export verified",
+      "actualExportVerified": false,
+      "subcategories": false,
+      "receiptPhotos": false,
+      "unsupportedFields": [
+        "Third-party JSON/full backup",
+        "Receipt photos",
+        "Recurring rules/budgets/settings",
+        "Sub-Category, Periodic, Project, uid not mapped by preset."
+      ]
+    },
+    {
+      "app": "Mobills",
+      "id": "mobills",
+      "format": "Recognized CSV / .xlsx column layout",
+      "parser": "js/presets.js detectPreset → js/io.js rowsToTx",
+      "requiredHeaders": [
+        "data",
+        "descrição",
+        "valor",
+        "conta",
+        "categoria"
+      ],
+      "mappedFields": [
+        "date",
+        "merchant",
+        "amount",
+        "account",
+        "category"
+      ],
+      "fixtures": [
+        "tests/fixtures/mobills.csv"
+      ],
+      "tests": "tests/presets.test.mjs",
+      "evidence": "Synthetic fixtures / published-source schema references; no checked-in actual app export verified",
+      "actualExportVerified": false,
+      "subcategories": false,
+      "receiptPhotos": false,
+      "unsupportedFields": [
+        "Third-party JSON/full backup",
+        "Receipt photos",
+        "Recurring rules/budgets/settings",
+        "Subcategoria not mapped; transfers unknown and can remain money in/out."
+      ]
+    },
+    {
+      "app": "Money Manager (Innim)",
+      "format": ".mmbackup ZIP / MyFinance.db",
+      "parser": "js/mmimport.js readMoneyManager",
+      "tests": [
+        "tests/mmimport.test.mjs",
+        "tests/imports.test.mjs",
+        "tests/audit.test.mjs"
+      ],
+      "evidence": "Generated SQLite schema fixtures; no actual app-produced backup in checked-in tests verified",
+      "actualExportVerified": false,
+      "subcategories": false,
+      "receiptPhotos": "Implemented optional photos/ link schema; synthetic link test only",
+      "unsupportedFields": [
+        "Full third-party settings/budget/recurring restore"
+      ]
+    },
+    {
+      "app": "Money Manager (Realbyte)",
+      "format": "Android .mmbak SQLite, bare or ZIP",
+      "parser": "js/mmimport.js readRealbyte",
+      "tests": [
+        "tests/presets.test.mjs",
+        "tests/imports.test.mjs"
+      ],
+      "evidence": "Generated SQLite schema fixtures; no actual app-produced backup in checked-in tests verified",
+      "actualExportVerified": false,
+      "subcategories": true,
+      "receiptPhotos": false,
+      "unsupportedFields": [
+        "Full third-party settings/budget/recurring restore"
+      ]
+    },
+    {
+      "app": "Cashew",
+      "format": "SQLite .sql",
+      "parser": "js/mmimport.js readRealbyte → readCashew",
+      "tests": [
+        "tests/imports.test.mjs"
+      ],
+      "evidence": "Generated SQLite schema fixtures; no actual app-produced backup in checked-in tests verified",
+      "actualExportVerified": false,
+      "subcategories": false,
+      "receiptPhotos": false,
+      "unsupportedFields": [
+        "Full third-party settings/budget/recurring restore",
+        "Unpaid/planned transactions intentionally skipped",
+        "Archived wallets omitted by audited baseline"
+      ]
+    },
+    {
+      "app": "Money2Time",
+      "format": "Android JSON v3, supported MYR subset",
+      "parser": "js/money2time.js readMoney2Time",
+      "tests": [
+        ".ocr-work/money2time/money2time.test.mjs",
+        ".ocr-work/money2time/import.e2e.mjs"
+      ],
+      "actualExportVerified": true,
+      "evidence": "Actual Android app-produced developer-owned synthetic book and attached owned photo: .ocr-work/research/money2time-import/actual-export-with-photo.json. Actual source expense/balance reconciled. Isolated Tally DOM/decoder/IndexedDB import passes; Tally device roundtrip pending.",
+      "subcategories": "parent_id mapping and unused definitions implemented; synthetic extension tests only, actual source Pro creation unavailable",
+      "receiptPhotos": "Actual source receipts/UUID.jpg base64; exact JPEG bytes, real decoder and atomic IDB commit tested",
+      "unsupportedFields": [
+        "Non-MYR books and FX",
+        "Active splits",
+        "Linked or different-account split repayments",
+        "Reimbursements",
+        "Loans/goals",
+        "Nonzero credit opening sign",
+        "Budgets/recurring/albums/items/receipt splits",
+        "Settings/account groups/category icons/exchange cache omitted",
+        "Settled split history omitted with visible warning; exact saved amounts retained",
+        "Deleted transactions omitted"
+      ]
+    }
+  ]
+}

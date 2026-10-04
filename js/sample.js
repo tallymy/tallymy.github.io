@@ -81,6 +81,11 @@ export function sampleData(today, now = Date.now(), cash = 'Cash', goal = 'Emerg
   split(receipt(17, '21:30', 's_tng', 'Cahaya Cinema', [['Movie tickets x3', 5400, 'fun'], ['Popcorn combo', 2290, 'fun']]), [ME, 'Aisyah', 'Hafiz'], [[], []], 'Hafiz');
   add(6, '21:05', 'transfer', 2000, owe.find(a => a.kind === 'owedme').id, 'other', 'Aisyah', { toAccountId: 's_bank', repaidBy: 'Aisyah' });   // part of her share back
 
+  // A completed repayment alongside Aisyah's part-payment and the still-unpaid Hafiz bill.
+  // Use the saved share amount; clearing it changes account balances, never spending.
+  const weiShare = tx.find(x => x.type === 'transfer' && x.owedBy === 'Wei Ling');
+  add(5, '18:15', 'transfer', weiShare.amount, weiShare.toAccountId, 'other', 'Wei Ling', { toAccountId: 's_bank', repaidBy: 'Wei Ling' });
+
   // Subcategories as Tally guesses them from the shop's name (Kopitiam, Mamak, Petrol, Pharmacy, Dental, Movies...); some stay none.
   for (const x of tx) if (x.type === 'expense' && !x.sub) { const s = subFor(x.category, x.merchant, x.items || []); if (s) x.sub = s; }
 

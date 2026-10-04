@@ -27,7 +27,7 @@ export async function loadSqlJs() {
 
 const hex = argb => `#${(Number(argb) & 0xffffff).toString(16).padStart(6, '0')}`;
 /** Their uid → our id, by the same rule as backups (a uid that breaks it is hashed instead). */
-const mmId = u => { const id = `mm_${String(u).slice(0, 40)}`; return okId(id) ? id : `mm_h${hash(u)}`; };
+const mmId = u => { const text = String(u), id = `mm_${text}`; return text.length <= 40 && okId(id) ? id : `mm_h${hash(text)}`; };
 const pad = n => String(n).padStart(2, '0');
 /** '2023-04-20T09:30:40.418Z' → local 'HH:MM' (when the entry was logged: the habit engine learns from it). */
 const localTime = iso => { const d = new Date(iso); return isNaN(d) ? undefined : `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
@@ -71,6 +71,7 @@ export async function readMoneyManager(buf, SQL, { now = Date.now() } = {}) {
     for (const t of rows(`select uid, type, amountInAccountCurrency as amt, date, comment, created from "transaction" where isRemoved = 0 limit 200000`)) {
       const l = link.get(t.uid) || {};
       const amt = Number(t.amt);
+      if (!['Income', 'Expense'].includes(t.type)) { skipped++; continue; }
       if (!validIso(t.date) || !Number.isInteger(amt) || amt <= 0 || amt > MAX_SEN || !accIds.has(l.Account)) { skipped++; continue; }
       // Money Manager records a manual balance correction as an uncategorised entry with no note. It isn't spending:
       // leaving it out folds it into the opening balance, so today's balances still match.
@@ -95,6 +96,7 @@ export async function readMoneyManager(buf, SQL, { now = Date.now() } = {}) {
       for (const r of rows(`select * from transfer where isRemoved = 0 limit 200000`)) {
         const s = side.get(r.uid) || {}, from = fromC ? r[fromC] : s.from, to = toC ? r[toC] : s.to, amt = Number(r[amtC]), toAmt = Number(r[toAmtC]);
         if (!accIds.has(from) || !accIds.has(to) || from === to || !validIso(r.date) || !Number.isInteger(amt) || amt <= 0 || amt > MAX_SEN) { transfersSkipped++; continue; }
+        if (String(accRows.find(a => a.uid === from)?.currencyCode || 'MYR').trim().toUpperCase() !== String(accRows.find(a => a.uid === to)?.currencyCode || 'MYR').trim().toUpperCase() && !(Number.isInteger(toAmt) && toAmt > 0 && toAmt <= MAX_SEN)) { transfersSkipped++; continue; }
         tx.push({ id: mmId(r.uid), date: r.date, time: localTime(r.created), type: 'transfer', amount: amt, ...(Number.isInteger(toAmt) && toAmt > 0 && toAmt <= MAX_SEN && toAmt !== amt ? { toAmount: toAmt } : {}),
           accountId: mmId(from), toAccountId: mmId(to), category: 'other', merchant: cleanText(r.comment, 80), note: '', source: 'import', createdAt: now });
       }
@@ -173,6 +175,8 @@ export async function readRealbyte(buf, SQL, { now = Date.now() } = {}) {
       if (kind === '3') {
         const to = accId.get(String(t.toAssetUid));
         if (!to || to === acc) { skipped++; continue; }
+        const fromCurrency = String(accRows.find(a => String(a.uid) === String(t.assetUid))?.iso || 'MYR').trim().toUpperCase(), toCurrency = String(accRows.find(a => String(a.uid) === String(t.toAssetUid))?.iso || 'MYR').trim().toUpperCase();
+        if (fromCurrency !== toCurrency) throw new Error('This Money Manager backup has transfers between different currencies that cannot be read safely. Nothing was imported.');
         tx.push({ ...base, type: 'transfer', toAccountId: to, category: 'other' }); transfers++;
       } else if (kind === '0' || kind === '1') {
         const type = kind === '0' ? 'income' : 'expense';
@@ -195,13 +199,22 @@ function readCashew({ rows, cols, now }) {
   if (!need('transactions', ['transaction_pk', 'amount', 'category_fk', 'wallet_fk', 'date_created']) || !need('wallets', ['wallet_pk', 'name']) || !need('categories', ['category_pk', 'name']))
     throw new Error('This Cashew backup is from a version Tally does not know yet.');
   const cw = pk => `cw_${hash(pk)}`, tc = cols('transactions'), opt = c => (tc.has(c) ? c : `null as ${c}`);
-  const customCats = [], catMap = Object.create(null);
-  for (const c of rows(`select category_pk, name, ${cols('categories').has('income') ? 'income' : '0 as income'} from categories limit 2000`))
-    if (String(c.category_pk) !== '0') catMap[String(c.category_pk)] = keepName(cleanText(c.name, 40) || 'Category', c.income === 1, customCats, `c_cw_${hash(c.category_pk)}`, nextColor(customCats.map(x => x.color)));
-  const wc = cols('wallets'), wallets = rows(`select wallet_pk, name${wc.has('currency') ? ', currency' : ''}${wc.has('date_created') ? ', date_created' : ''} from wallets${wc.has('archived') ? ' where coalesce(archived, 0) = 0' : ''} limit 200`);
+  const customCats = [], catMap = Object.create(null), subMap = Object.create(null);
+  const categories = rows(`select category_pk, name, ${cols('categories').has('income') ? 'income' : '0 as income'}, ${cols('categories').has('main_category_pk') ? 'main_category_pk' : 'null as main_category_pk'} from categories limit 2000`);
+  const categoryIds = new Set(categories.map(c => String(c.category_pk)));
+  for (const c of categories) if (String(c.category_pk) !== '0' && !categoryIds.has(String(c.main_category_pk)))
+    catMap[String(c.category_pk)] = keepName(cleanText(c.name, 40) || 'Category', c.income === 1, customCats, `c_cw_${hash(c.category_pk)}`, nextColor(customCats.map(x => x.color)));
+  for (const c of categories) if (categoryIds.has(String(c.main_category_pk))) {
+    subMap[String(c.category_pk)] = { name: cleanText(c.name, 30), parent: String(c.main_category_pk) };
+    catMap[String(c.category_pk)] = catMap[String(c.main_category_pk)] || (c.income === 1 ? 'income' : 'other');
+  }
+  const wc = cols('wallets'), wallets = rows(`select wallet_pk, name${wc.has('currency') ? ', currency' : ''}${wc.has('date_created') ? ', date_created' : ''} from wallets limit 200`);
   const accId = new Map(wallets.map(w => [String(w.wallet_pk), cw(w.wallet_pk)]));
-  const all = rows(`select transaction_pk, ${opt('paired_transaction_fk')}, ${opt('name')}, ${opt('note')}, amount, category_fk, wallet_fk, date_created, ${opt('paid')} from transactions limit 200000`);
-  const byPk = new Map(all.map(t => [String(t.transaction_pk), t])), tx = [], opening = new Map(), done = new Set();
+  const all = rows(`select transaction_pk, ${opt('paired_transaction_fk')}, ${opt('name')}, ${opt('note')}, amount, category_fk, wallet_fk, date_created, ${opt('paid')}, ${opt('sub_category_fk')} from transactions limit 200000`);
+  const byPk = new Map(all.map(t => [String(t.transaction_pk), t])), tx = [], opening = new Map(), done = new Set(), backLinks = new Map();
+  for (const row of all) if (row.paired_transaction_fk != null) {
+    const key = String(row.paired_transaction_fk); (backLinks.get(key) || backLinks.set(key, []).get(key)).push(row);
+  }
   let skipped = 0, adjustments = 0, transfers = 0, planned = 0;
   const when = s => { const n = Number(s), d = new Date(n > 1e11 ? n : n * 1000); return isNaN(d) || n <= 0 ? null : { date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`, time: `${pad(d.getHours())}:${pad(d.getMinutes())}` }; };
   for (const t of all) {
@@ -210,11 +223,16 @@ function readCashew({ rows, cols, now }) {
     if (t.paid === 0) { planned++; continue; }
     if (!acc || !w || !validIso(w.date) || !Number.isInteger(amt) || amt > MAX_SEN) { skipped++; continue; }
     if (!amt) continue;
-    const other = t.paired_transaction_fk != null && byPk.get(String(t.paired_transaction_fk)), otherAcc = other && accId.get(String(other.wallet_fk));
-    if (otherAcc && otherAcc !== acc && other.paid !== 0) {   // a transfer: once, from the side money left
-      done.add(String(other.transaction_pk));
-      const [from, to] = Number(t.amount) < 0 ? [acc, otherAcc] : [otherAcc, acc];
-      tx.push({ id: cw(pk), ...w, type: 'transfer', amount: amt, accountId: from, toAccountId: to, category: 'other', merchant: cleanText(t.name, 80), note: cleanText(t.note, 200), source: 'import', createdAt: now });
+    const inbound = backLinks.get(pk) || [];
+    const other = t.paired_transaction_fk != null ? byPk.get(String(t.paired_transaction_fk)) : inbound.length === 1 ? inbound[0] : null, otherAcc = other && accId.get(String(other.wallet_fk));
+    if (t.paired_transaction_fk != null || inbound.length) {
+      const otherAmount = other && Math.round(Math.abs(Number(other.amount)) * 100);
+      const pairOnly = other && (other.paired_transaction_fk == null || String(other.paired_transaction_fk) === pk) && inbound.every(row => String(row.transaction_pk) === String(other.transaction_pk)) && (backLinks.get(String(other.transaction_pk)) || []).every(row => String(row.transaction_pk) === pk);
+      if (!otherAcc || otherAcc === acc || !pairOnly || other.paid === 0 || !when(other.date_created) || !Number.isInteger(otherAmount) || otherAmount <= 0 || otherAmount > MAX_SEN || !(Number(t.amount) * Number(other.amount) < 0)) { skipped++; continue; }
+      done.add(pk); done.add(String(other.transaction_pk));
+      const outgoing = Number(t.amount) < 0 ? t : other, incoming = outgoing === t ? other : t;
+      const fromAmount = Math.round(Math.abs(Number(outgoing.amount)) * 100), toAmount = Math.round(Math.abs(Number(incoming.amount)) * 100);
+      tx.push({ id: cw(String(outgoing.transaction_pk)), ...when(outgoing.date_created), type: 'transfer', amount: fromAmount, ...(toAmount !== fromAmount ? { toAmount } : {}), accountId: accId.get(String(outgoing.wallet_fk)), toAccountId: accId.get(String(incoming.wallet_fk)), category: 'other', merchant: cleanText(outgoing.name, 80), note: cleanText(outgoing.note, 200), source: 'import', createdAt: now });
       transfers++; continue;
     }
     if (String(t.category_fk) === '0') { opening.set(acc, (opening.get(acc) || 0) + (Number(t.amount) < 0 ? -amt : amt)); adjustments++; continue; }   // Balance Correction: not spending
@@ -222,7 +240,9 @@ function readCashew({ rows, cols, now }) {
     let category = catMap[String(t.category_fk)] || (type === 'income' ? 'income' : 'other');
     if (type === 'income' && !INCOME_CATEGORIES.some(c => c.id === category) && !customCats.some(c => c.id === category && c.kind === 'income')) category = 'income';
     if (type === 'expense' && (INCOME_CATEGORIES.some(c => c.id === category) || customCats.some(c => c.id === category && c.kind === 'income'))) category = 'other';
-    tx.push({ id: cw(pk), ...w, type, amount: amt, accountId: acc, category, merchant: cleanText(t.name, 80), note: cleanText(t.note, 200), source: 'import', createdAt: now });
+    const sub = subMap[String(t.sub_category_fk)] || subMap[String(t.category_fk)];
+    const subName = sub && catMap[sub.parent] === category ? sub.name : '';
+    tx.push({ id: cw(pk), ...w, type, amount: amt, accountId: acc, category, ...(subName ? { sub: subName } : {}), merchant: cleanText(t.name, 80), note: cleanText(t.note, 200), source: 'import', createdAt: now });
   }
   const accounts = wallets.map((a, n) => {
     const id = accId.get(String(a.wallet_pk)), bal = opening.get(id) || 0, made = Number(a.date_created) * 1000;
@@ -231,8 +251,12 @@ function readCashew({ rows, cols, now }) {
   return { accounts: accounts.map(keepCurrency), tx, customCats, photos: [], skipped, adjustments, planned, otherCurrency: accounts.map(keepCurrency).filter(a => a.currency).map(a => a.name), transfersSkipped: 0, transfers, app: 'cashew' };
 }
 /** An account in another currency keeps it (left out of the RM total, shown with its code); an RM one has none. */
-const keepCurrency = ({ currency, ...a }) => (/^[A-Z]{3}$/.test(currency) && currency !== 'MYR' ? { ...a, currency } : a);
-const rbId = u => { const id = `rb_${String(u).slice(0, 40)}`; return okId(id) ? id : `rb_h${hash(u)}`; };
+const keepCurrency = ({ currency, ...a }) => {
+  const code = String(currency || 'MYR').trim().toUpperCase();
+  if (!/^[A-Z]{3}$/.test(code)) throw new Error('This backup has an unreadable account currency. Nothing was imported.');
+  return code !== 'MYR' ? { ...a, currency: code } : a;
+};
+const rbId = u => { const text = String(u), id = `rb_${text}`; return text.length <= 40 && okId(id) ? id : `rb_h${hash(text)}`; };
 
 /** Photo bytes for some of the imported transactions (read from the same backup, only when the user asks). */
 export const readPhotos = (buf, paths) => { const want = new Set(paths); return unzip(buf, n => want.has(n)); };

@@ -76,11 +76,14 @@ export async function readCapped(res, max) {
   if (+res.headers.get('content-length') > max) throw new Error('too big');
   return res.body ? readAll(res.body, max) : new Uint8Array(0);
 }
-const inflateRaw = (bytes, max) => readAll(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw')), max);
+const inflateRaw = (bytes, max) => {
+  let decoder;try { decoder = new DecompressionStream('deflate-raw'); } catch { throw new Error('This Android WebView cannot open compressed ZIP entries. Update Android System WebView and try again.'); }
+  return readAll(new Blob([bytes]).stream().pipeThrough(decoder), max);
+};
 /** Zip → {path: Uint8Array} for the paths wanted (stored or deflated entries). Bytes before the zip are
  * allowed (Money Manager backups start with 8 of them): offsets are taken from the first local header.
  * A deflated entry may not inflate past its declared size, nor all of them past `budget`; a repeated name is read once. */
-export async function unzip(buf, want, { budget = ZIP.budget, entries = ZIP.entries } = {}) {
+export async function unzip(buf, want, { budget = ZIP.budget, entries = ZIP.entries, onEntry = async () => {} } = {}) {
   const b = new Uint8Array(buf), dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
   const bad = () => { throw new Error('bad zip'); };
   if (b.length < 22) bad();
@@ -95,13 +98,16 @@ export async function unzip(buf, want, { budget = ZIP.budget, entries = ZIP.entr
   const out = Object.create(null); // entry names are untrusted: "__proto__" is just a name here
   for (let n = 0; n < count; n++) {
     if (p + 46 > b.length || dv.getUint32(p, true) !== 0x02014b50) bad();
+    const flags = dv.getUint16(p + 8,true), checksum=dv.getUint32(p+16,true);
     const method = dv.getUint16(p + 10, true), size = dv.getUint32(p + 20, true), full = dv.getUint32(p + 24, true);
     const nameLen = dv.getUint16(p + 28, true), extraLen = dv.getUint16(p + 30, true), commentLen = dv.getUint16(p + 32, true);
     const local = base + dv.getUint32(p + 42, true);
     if (p + 46 + nameLen > b.length) bad();
     const name = new TextDecoder().decode(b.subarray(p + 46, p + 46 + nameLen));
     p += 46 + nameLen + extraLen + commentLen;
+    await onEntry(n+1,count);
     if (!want(name) || name in out) continue;
+    if(flags & 1)bad();
     if (++read > entries) break;
     if (local + 30 > b.length || dv.getUint32(local, true) !== 0x04034b50) bad();
     const start = local + 30 + dv.getUint16(local + 26, true) + dv.getUint16(local + 28, true);
@@ -110,9 +116,10 @@ export async function unzip(buf, want, { budget = ZIP.budget, entries = ZIP.entr
     // each other's extra field) would hand out the same bytes thousands of times, past every budget.
     if ((taken += size) > b.length) bad();
     const data = b.subarray(start, start + size);
-    if (method === 0) { if (size > budget) throw new Error('too big'); out[name] = data; } // stored: a view of the file, no copy
+    if (method === 0) { if (size > left) throw new Error('too big'); out[name] = data; left -= size; } // stored: a view of the file, no copy
     else if (method === 8) { if (full > left) throw new Error('too big'); out[name] = await inflateRaw(data, full); left -= out[name].length; }
-    else out[name] = null;
+    else bad();
+    if(out[name].length!==full || crc32(out[name])!==checksum)bad();
   }
   return out;
 }
@@ -540,9 +547,9 @@ export function rowsToTx(rows, map, { accountId, accounts = {}, catMap = {}, cus
   const signed = !!preset?.signed || (negs > 0 && negs >= amts.length * 0.15);
   // A Paid? / Done column of ticks: unticked rows are bills still to pay, not spending yet.
   const paidCol = header.findIndex(h => /^(paid\??|done|settled|dibayar\??|sudah bayar|bayar\??|已付|已付款|已缴)$/i.test(cleanText(h, 30)));
-  const curCol = header.findIndex(h => /^(currency|curr\.?|ccy|mata wang|货币|貨幣|幣別|币种)$/i.test(cleanText(h, 30)));
+
   const fxCol = header.findIndex((h, i) => i !== map.amount && /^(sgd|s\$|usd|us\$|eur|gbp|aud|idr|thb|cny|rmb|jpy|hkd|bnd)$|\((sgd|s\$|usd|eur|gbp|aud|idr|thb|cny|jpy|hkd|bnd)\)$/i.test(cleanText(h, 30)));
-  const dc = map.debit != null || map.credit != null, mdy = map.date != null && dateOrder(rows, map.date, preset?.mdy);
+  const dc = map.debit != null || map.credit != null, mdy = map.date != null && (preset && typeof preset.mdy === 'boolean' ? preset.mdy : dateOrder(rows, map.date));
   const amtOf = r => { const a = dc ? fileAmount(r[map.debit]) || fileAmount(r[map.credit]) : fileAmount(r[map.amount]); return a ? Math.abs(a) : null; };
   const bal = balanceSigns(rows, map, amtOf);
   // An e-wallet's Status column: a failed, cancelled or reversed payment never moved money.
@@ -551,9 +558,12 @@ export function rowsToTx(rows, map, { accountId, accounts = {}, catMap = {}, cus
     if (status >= 0 && /fail|unsuccess|gagal|cancel|batal|reject|declin|revers|refused|失败|失敗|取消/i.test(r[status] ?? '')) return skipped.push({ row: n + 2, why: 'failed' });
     if (paidCol >= 0 && /^(false|no|tidak|belum|0|☐|✗|否)$/i.test(cleanText(r[paidCol], 10))) return skipped.push({ row: n + 2, why: 'unpaid' });
     // Another currency (a Currency column, or S$ / SGD in the amount) is never read as ringgit.
-    if ((fxCol >= 0 && !cleanText(r[map.amount ?? -1]) && cleanText(r[fxCol])) || (curCol >= 0 && /^(sgd|s\$|usd|us\$|eur|gbp|aud|idr|thb|cny|rmb|jpy|hkd|bnd)$/i.test(cleanText(r[curCol], 10))) || /^-?\s*(s\$|sgd\b)/i.test(String(r[map.amount] ?? r[map.debit] ?? r[map.credit] ?? '').trim().slice(0, 40))) return skipped.push({ row: n + 2, why: 'currency' });
+    const explicitCurrencies = header.flatMap((h, i) => /^(currency(?: [12])?|curr\.?|ccy|mata wang|货币|貨幣|幣別|币种)$/i.test(cleanText(h, 30)) ? [cleanText(r[i], 20).toUpperCase()] : []).filter(Boolean);
+    if (explicitCurrencies.some(c => !/^(MYR|RM)$/.test(c)) || (fxCol >= 0 && !cleanText(r[map.amount ?? -1]) && cleanText(r[fxCol])) || /^-?\s*(s\$|sgd\b)/i.test(String(r[map.amount] ?? r[map.debit] ?? r[map.credit] ?? '').trim().slice(0, 40))) return skipped.push({ row: n + 2, why: 'currency' });
     const cx = rowCtx(r, map, header), get = cx.get;
-    const z = zoned(get('date')), date = z?.date || fileDate(get('date'), mdy);
+    if (preset?.type && !preset.type(cx) && !preset.transfer?.(cx) && !preset.adjust?.(cx)) return skipped.push({ row: n + 2, why: 'type' });
+    const rawDate = get('date');
+    const z = zoned(rawDate) || (preset?.utc && /^\d{4}-\d\d-\d\d[T ]\d\d:\d\d(?::\d\d(?:\.\d+)?)?$/.test(cleanText(rawDate, 40)) ? zoned(cleanText(rawDate, 40) + 'Z') : null), date = z?.date || fileDate(rawDate, mdy);
     let amt = null, type = null, sign = 1;
     if (dc) {
       const d = fileAmount(get('debit')), c = fileAmount(get('credit'));
@@ -569,6 +579,7 @@ export function rowsToTx(rows, map, { accountId, accounts = {}, catMap = {}, cus
     if (/^((sub ?)?total|grand total|jumlah( besar| keseluruhan| kecil)?|合计|合計|总计|總計|小计|小計|carried forward|c\/f\b)/i.test(label)) return;
     const own = preset?.amount && fileAmount(preset.amount(cx)); if (own) amt = Math.abs(own);   // Toshl: the amount in the main currency
     const tword = cleanText(get('type'), 40);
+    if (preset && map.type != null && tword && !/^(income|expense|expenses|exp\.?|transfer(?:[ -](?:out|in))?|outgoing transfer|incoming transfer)$/i.test(tword) && !preset.transfer?.(cx) && !preset.adjust?.(cx)) return skipped.push({ row: n + 2, why: 'type' });
     if (tword) type = OUT_TYPE.test(tword) ? 'expense' : IN_TYPE.test(tword) ? 'income' : TRANSFER_WORD.test(tword) ? 'expense' : INCOME_WORD.test(tword) ? 'income' : 'expense';
     if (bal[n] && !dc && !signed) type = bal[n] > 0 ? 'income' : 'expense'; // only unsigned amounts: columns and signs say it outright
     type = preset?.type?.(cx) || type || 'expense'; // ponytail: transfers from unknown apps come in as expenses; pairTransfers joins the ones it can see
@@ -922,7 +933,7 @@ export function readBackup(text) {
   const cat = c => (ALL_CATS.some(x => x.id === c) || customIds.has(c) ? c : 'other');
   const accounts = list(d.accounts, 200).filter(a => isObj(a) && okId(a.id))
     .map(a => ({ id: a.id, name: cleanText(a.name, 60) || 'Account', kind: [...ACCOUNT_KINDS, ...OWING_KINDS].includes(a.kind) ? a.kind : 'cash', opening: okSigned(a.opening) ? a.opening : 0, createdAt: okMs(+a.createdAt), ...((a.scope === 'joint' || a.scope === 'business') && !OWING_KINDS.includes(a.kind) ? { scope: a.scope } : {}),   // what friends owe is never joint
-      ...(/^[A-Z]{3}$/.test(a.currency) && a.currency !== 'MYR' ? { currency: a.currency, ...(+a.rate > 0 && +a.rate < 1e5 ? { rate: +a.rate } : {}) } : {}), ...(a.outside === true ? { outside: true } : {}), ...(a.typed === true ? { typed: true } : {}), ...upd(a.updatedAt) }));
+      ...(/^[A-Z]{3}$/.test(a.currency) && a.currency !== 'MYR' ? { currency: a.currency, ...(+a.rate > 0 && +a.rate < 1e5 ? { rate: +a.rate } : {}) } : {}), ...(a.outside === true ? { outside: true } : {}), ...(typeof a.typed === 'boolean' ? { typed: a.typed } : {}), ...upd(a.updatedAt) }));
   const ids = new Set(accounts.map(a => a.id));
   // A friend's name (a split bill): as the split sheet takes it, and never a key that reaches an object's prototype.
   const friend = v => { const s = typeof v === 'string' ? cleanText(v, 20) : ''; return s && !RESERVED.has(s) ? s : ''; };

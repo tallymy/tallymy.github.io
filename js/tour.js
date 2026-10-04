@@ -149,7 +149,7 @@ export const WHATS_NEW = {
     "Safer data: imports save all or nothing, a photo that can't be read is kept to try again, and Tally opens faster offline",
   ],
   '0.5.0': [
-    'Bring your history from Money Manager (Realbyte, Excel or .mmbak), Money Lover, Spendee, Wallet, Monefy, YNAB, Cashew, Bluecoins, 1Money, Toshl and AndroMoney: no column matching, and transfers, accounts and categories come across',
+    'Bring transaction exports from other apps. Check supported formats and the preview first.',
     'Learn Tally: short missions that show what Tally can do, each ticked off when you do it (Settings, and on Home while you are new)',
     'Streaks and badges, off unless you turn them on in Settings: a logging streak with one rest day a week, and badges for good money habits',
     'With streaks on, a day with nothing spent keeps your streak going: tap Nothing spent today',

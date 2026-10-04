@@ -9,7 +9,7 @@ import { detectPreset } from '../presets.js';
 import { parseStatement, statementToTx, linesFromItems, detectProvider, guessKind, PAGE_BREAK, isWallet } from '../statement.js';
 import { render, go, APP_VERSION, MAKER, CONTACT } from '../app.js';
 import { openFeedback } from '../feedback.js';
-import { bookGeneration } from '../state.js';
+import { bookGeneration, restoreSnapshot } from '../state.js';
 import { isNative, reminderStatus, configureReminder } from '../native.js';
 import { syncReminderDay } from '../state.js';
 import { dailyEvent, ics, googleUrl } from '../calendar.js';
@@ -292,7 +292,7 @@ export const settingsView = {
     return `<header class="top"><button class="icon-btn" data-act="back" data-to="home" aria-label="${esc(t('Back'))}">${ICON.back}</button><h1>${esc(t('Settings'))}</h1><span></span></header>
       <div class="sfind" role="search"><label class="search">${ICON.search}<input id="set-q" type="search" data-input="set-q" value="${esc(findQ)}" placeholder="${esc(t('Search settings'))}" aria-label="${esc(t('Search settings'))}" aria-controls="set-hits" autocomplete="off"></label>
         <ul class="list" id="set-hits" aria-label="${esc(t('Search settings'))}"></ul><p class="fine" id="set-none" role="status"></p></div>
-      <nav class="jumps chips" aria-label="${esc(t('Go to'))}">${[['s-backup', t('Backup & restore')], ['s-accounts', t('Accounts')], ['s-cats', t('Categories')], ['look', t('Language & text size')], ['remind', t('Daily reminder')], ['s-help', t('Help and feedback')]].map(([id, l]) => `<button class="chip" data-act="jump" data-to="${id}">${esc(l)}</button>`).join('')}</nav>
+      <nav class="jumps chips" aria-label="${esc(t('Go to'))}">${[['s-backup', t('Backup & restore')], ...(isNative ? [['s-computer', t('Connect to computer')]] : []), ['s-accounts', t('Accounts')], ['s-cats', t('Categories')], ['look', t('Language & text size')], ['remind', t('Daily reminder')], ['s-help', t('Help and feedback')]].map(([id, l]) => `<button class="chip" data-act="jump" data-to="${id}">${esc(l)}</button>`).join('')}</nav>
       ${featuresCard()}
       ${lookCard()}
       <section class="card"><h2>${esc(t('Budget month'))}</h2>
@@ -324,7 +324,7 @@ export const settingsView = {
         <button class="btn ghost wide" data-act="migration-guide">${esc(t('Migration help'))}</button>
         <p class="warnbox">${ICON.alert}<span>${esc(isNative ? t('Uninstalling Tally, clearing its app data, or resetting this phone deletes your entries, accounts and receipt photos. Back up first.') : t('Uninstalling Tally or clearing its site data deletes your Tally entries, accounts and receipt photos from this phone. Back up first.'))} <button class="link" data-act="storage-info">${esc(t('How your data is kept'))}</button></span></p>
         ${storage.persisted == null ? '' : `<p class="fine">${esc(storage.persisted ? t('Storage: protected. The browser will not clear Tally to free up space.') : t('If the phone runs out of space, the browser may clear Tally. A backup file keeps you safe.'))}</p>`}</section>
-      <section class="card" id="s-data"><h2>${esc(t('Import & export'))}</h2><p class="fine">${esc(t('From Money Manager, Money Lover, Spendee, Wallet, Monefy, YNAB, Cashew, Bluecoins, 1Money, Toshl or AndroMoney, Excel, CSV, a bank statement, or Google Sheets.'))}</p>
+      <section class="card" id="s-data"><h2>${esc(t('Import & export'))}</h2><p class="fine">${esc(t('Supported CSV/Excel layouts, bank statements, Google Sheets, selected Money Manager/Cashew backups, or a Tally backup.'))}</p>
         <button class="btn ghost wide" data-act="import-open">${ICON.upload}${esc(t('Import'))}</button>
         <p class="fine">${esc(t('Your data is never locked in: take it to Excel, Google Sheets or another money app any time.'))}</p>
         <button class="btn ghost wide" data-act="export-open">${ICON.download}${esc(t('Export'))}</button></section>
@@ -348,7 +348,7 @@ export const settingsView = {
         <button class="btn ghost danger wide" data-act="erase">${ICON.trash}${esc(t("Erase Tally's data"))}</button>
         <p class="legal">${legalLinks()}</p></section>
       ${learnCard()}
-      ${isNative ? `<section class="card"><h2>${esc(t('Use Tally on your computer'))}</h2><p class="fine">${esc(t('A bigger screen for your expenses. Nothing to install on the computer.'))}</p><button class="btn ghost wide" data-act="desk-connect">${esc(t('Start connection'))}</button></section>` : ''}
+      ${isNative ? `<section class="card" id="s-computer"><h2>${esc(t('Use Tally on your computer'))}</h2><p class="fine">${esc(t('A bigger screen for your expenses. Nothing to install on the computer.'))}</p><button class="btn ghost wide" data-act="desk-connect">${esc(t('Start connection'))}</button></section>` : ''}
       ${isNative ? `<section class="card"><h2>${esc(t('Receipt shortcut'))}</h2><p class="fine">${esc(t('Double-tap a volume button while Tally is open to open the receipt camera. It does nothing in other apps. Single presses still change the volume.'))}</p><label class="field"><span>${esc(t('Button'))}</span><select data-input="scan-shortcut" id="scan-shortcut"><option value="off">${esc(t('Off'))}</option><option value="up">${esc(t('Volume up'))}</option><option value="down">${esc(t('Volume down'))}</option></select></label><p class="fine">${esc(t('For receipts in another app, take a screenshot and share that image with Tally. No background screen access.'))}</p></section>` : ''}
       <section class="card" id="s-help"><h2>${esc(t('Help and feedback'))}</h2>
         <div class="row2"><button class="btn ghost" data-act="tour">${esc(t('Take the tour'))}</button><button class="btn ghost" data-act="whats-new">${esc(t("What's new"))}</button></div>
@@ -409,8 +409,9 @@ function importSheet() {
     <label class="btn wide filebtn">${ICON.upload}${esc(t('Choose a file'))}<input type="file" id="imp-file" hidden></label>
     <p class="err" id="imp-err" role="alert"></p>
     <p class="fine">${esc(t("Can't see your file here? Open your phone's file manager, long-press the file and Share it to Tally. Or move it to another folder once, then it shows up here."))}</p>
-    <p class="fine">${esc(t('Exports and backups from Money Manager (Innim or Realbyte), Money Lover, Spendee, Wallet, Monefy, YNAB, Cashew, Bluecoins, 1Money, Toshl or AndroMoney; Excel (.xlsx) or CSV from your bank; or a Tally backup.'))}</p>
-    <details class="howto"><summary>${esc(t('How to export from your money app'))}</summary><ul class="newlist">${howTo().map(([a, s]) => `<li><b>${esc(a)}:</b> ${esc(s)}</li>`).join('')}</ul></details>
+    <p class="fine">${esc(t('Choose a supported export or a Tally backup. See supported formats below.'))}</p>
+    <p class="fine">${esc(t('CSV and Excel files do not contain receipt photos. Money2Time JSON v3 supports a limited MYR subset; other JSON backups are not supported. Check the preview before saving.'))}</p>
+    <details class="howto"><summary>${esc(t('Supported import formats'))}</summary><ul class="newlist">${howTo().map(([a, s]) => `<li><b>${esc(a)}:</b> ${esc(s)}</li>`).join('')}</ul></details>
     <h3>${esc(t('From Google Sheets'))}</h3>
     <label class="field"><span>${esc(t('Paste the cells (select all in the sheet, copy, paste here)'))}</span><textarea id="imp-paste" rows="4" placeholder="Date	Amount	Category	Note"></textarea></label>
     <button class="btn ghost wide" data-act="imp-paste">${esc(t('Use pasted cells'))}</button>
@@ -418,21 +419,14 @@ function importSheet() {
     <button class="btn ghost wide" data-act="imp-link">${esc(t('Fetch from Google Sheets'))}</button>`, { label: t('Import') });
   $('#imp-file').addEventListener('change', e => { const f = e.target.files[0]; if (f) importFile(f); });
 }
-/** Where each app keeps its export (presets.js reads them with no column matching). Menu names as the apps' help pages
- *  give them; ponytail: check a path when an app redesigns its settings. */
+/** Known input layouts, not unverified current app menu instructions. */
 const howTo = () => [
-  ['Money Manager (Realbyte)', t('More → Backup → Export data to Excel, or Backup data for a .mmbak file.')],
-  ['Money Manager (Innim)', t('Settings → Backup → create a backup (.mmbackup).')],
-  ['Money Lover', t('Settings → Export to CSV or Excel, with all wallets.')],
-  ['Spendee', t('Settings → Export (CSV). One file per wallet; transfers between them are matched.')],
-  ['Wallet by BudgetBakers', t('Settings → Export → all data, CSV.')],
-  ['Monefy', t('Settings → Export to file (CSV).')],
-  ['YNAB', t('Budget menu → Export budget; unzip it and pick the Register file.')],
-  ['Cashew', t('Settings → Import and export → Export CSV.')],
-  ['Bluecoins', t('Settings → Export to CSV.')],
-  ['1Money', t('Settings → Export to CSV.')],
-  ['Toshl', t('On toshl.com: Export → CSV.')],
-  ['AndroMoney', t('Settings → Export → CSV (Excel), all accounts.')],
+  ['Money Manager (Realbyte)', t('Android .mmbak or supported Excel (.xlsx) layout.')],
+  ['Money Manager (Innim)', t('Innim .mmbackup (MyFinance.db).')],
+  ...['Money Lover', 'Spendee', 'Wallet by BudgetBakers', 'Monefy', 'Bluecoins', '1Money', 'Toshl', 'AndroMoney', 'Mobills'].map(name => [name, t('CSV / Excel (.xlsx): supported column layouts.')]),
+  ['YNAB', t('CSV register file.')],
+  ['Cashew', t('CSV or SQLite .sql backup.')],
+  ['Money2Time', t('JSON v3: supported MYR subset only. See the preview for limits.')],
 ];
 const newAccName = () => cleanText(IMP?.accName || '', 40) || (IMP?.sheet ? t('Google Sheet') : '') || cleanText(String(IMP?.name || '').replace(/\.[a-z0-9]{2,5}$/i, ''), 40) || t('Imported');
 const impAccount = () => (IMP.accountId === 'new' ? IMP.newId : IMP.accountId);
@@ -440,7 +434,7 @@ const newKind = () => IMP.kind || (IMP.map.debit != null || IMP.map.credit != nu
 /** What's wrong with a typed amount: over RM 100 million, or not an amount. */
 const amtErr = v => (tooLarge(v) ? t('That amount is too large (RM 100 million at most).') : t('Enter amounts like 150 or 150.50.'));
 /** Import progress and errors, under "Choose a file" and scrolled into view (a small phone showed them below the fold). */
-const impErr = m => { const el = $('#imp-err'); if (!el) return toast(m, { k: 'bad' }); el.textContent = m; if (m) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); };
+const impErr = m => { let el = $('#imp-err'); if (!el) { const owner=[...document.querySelectorAll('.scrim:not(.out) .sheet')].at(-1); if(!owner)return toast(m,{k:'bad'}); el=document.createElement('p');el.className='err';el.id='imp-err';el.setAttribute('role','alert');owner.append(el); } el.textContent = m; if (m) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); };
 async function ensureAccount() {
   if (!S.accounts.length) await saveAccount({ id: uid('a'), name: t('Cash'), kind: 'cash', opening: 0, createdAt: Date.now() });
 }
@@ -450,15 +444,58 @@ const findAccount = (name, kind) => {
   const n = norm(name), ok = a => !kind || a.kind === kind;
   return n ? S.accounts.find(a => ok(a) && norm(a.name) === n) || S.accounts.find(a => ok(a) && (norm(a.name).startsWith(n) || n.startsWith(norm(a.name)))) : null;
 };
+// Status belongs to one sheet and one book; closing/replacing it cancels preparation.
+function beginBackupWork(title) {
+  let owner = [...document.querySelectorAll('.scrim:not(.out) .sheet')].at(-1);
+  if (!owner) owner = openSheet(`<h2 class="sh-title">${esc(t(title))}</h2><button class="btn ghost wide" data-act="sheet-close">${esc(t('Cancel'))}</button>`, { label: t(title) });
+  let status = owner.querySelector('[data-backup-status]');
+  if (!status) { status = document.createElement('p'); status.className = 'fine'; status.dataset.backupStatus = ''; status.setAttribute('role','status'); status.setAttribute('aria-live','polite'); status.setAttribute('aria-atomic','true'); owner.querySelector('.sh-title')?.after(status); if (!status.isConnected) owner.prepend(status); }
+  const work = { owner, status, generation: bookGeneration(), started: performance.now(), timings: [] };
+  owner.setAttribute('aria-busy','true'); return work;
+}
+function checkBackupWork(work) {
+  if (!work.owner.isConnected || work.owner.closest('.scrim')?.classList.contains('out')) throw Object.assign(new Error('Cancelled'),{name:'AbortError',cancelled:true});
+  if (work.generation !== bookGeneration()) throw new Error(t('The entry changed on your phone. Refresh and try again.'));
+}
+async function backupStage(work, key, ...args) {
+  checkBackupWork(work); work.status.textContent = t(key,...args);
+  work.timings.push({ stage:key, elapsedMs:Math.round(performance.now()-work.started) });
+  // Let a rendered frame show before JSON/SQLite/ZIP work. Timeout also resolves in a hidden WebView.
+  await new Promise(resolve => { let done=false; const finish=()=>{if(!done){done=true;clearTimeout(timer);resolve();}}; const timer=setTimeout(finish,50); requestAnimationFrame(()=>requestAnimationFrame(finish)); });
+  checkBackupWork(work);
+}
+function commitBackupWork(work) {
+  checkBackupWork(work);
+  work.disabledButtons=[...work.owner.querySelectorAll('[data-act="sheet-close"]')].map(button=>({button,disabled:button.disabled}));
+  for(const {button}of work.disabledButtons)button.disabled=true;
+}
+function finishBackupWork(work) { work?.owner.removeAttribute('aria-busy'); for(const {button,disabled}of work?.disabledButtons||[])button.disabled=disabled; }
+function money2TimeUndoKv(importedRows, addedCats, beforeSubs, importedSubs) {
+  const ids = new Set(importedRows.map(x=>x.id)), remaining = S.tx.filter(x=>!ids.has(x.id));
+  const usedCat = id => remaining.some(x=>x.category===id || x.items?.some(i=>i.category===id)) || Object.hasOwn(S.kv.budgets?.byCat||{},id) || Object.values(S.kv.rules||{}).includes(id) || Object.values(S.kv.subRules||{}).some(v=>(Array.isArray(v)?v[0]:v?.category)===id);
+  const customCats=(S.kv.customCats||[]).filter(c=>!addedCats.some(a=>a.id===c.id && JSON.stringify(a)===JSON.stringify(c)) || usedCat(c.id));
+  const subcats=structuredClone(S.kv.subcats||{});
+  for(const [key,names]of Object.entries(importedSubs)) {
+    const added=new Set(names.filter(n=>!(beforeSubs[key]||[]).includes(n)));
+    const usedSub=n=>remaining.some(x=>x.category===key && x.sub===n || x.items?.some(i=>i.category===key && i.sub===n)) || Object.values(S.kv.subRules||{}).some(v=>(Array.isArray(v)?v[0]:v?.category)===key && (Array.isArray(v)?v[1]:v?.sub)===n);
+    if(!subcats[key])continue;
+    subcats[key]=subcats[key].filter(n=>!added.has(n)||usedSub(n));
+    if(!subcats[key].length && !Object.hasOwn(beforeSubs,key))delete subcats[key];
+  }
+  return { customCats, subcats };
+}
 export async function importFile(f) {
   if (!$('#imp-err')) importSheet();   // shared from another app: show the import sheet for messages
   let kind = 'file';
+  const work = beginBackupWork('Bring data in');
   try {
     // A password-protected backup is its file in base64 (a third bigger): it may be as big as the biggest backup sealed.
     const sealed = f.size > LIMITS.backupBytes && isSealed(new TextDecoder().decode(await f.slice(0, 64).arrayBuffer()));
     if (f.size > (sealed ? SEALED_MAX : LIMITS.backupBytes)) return impErr(t('That file is too big (over 200 MB).'));
     impErr(t('Reading {0} ({1} MB)…', f.name || t('file'), Math.max(0.1, Math.round(f.size / 104857.6) / 10)));
+    await backupStage(work, 'Reading the backup file…');
     const buf = await f.arrayBuffer();
+    await backupStage(work, 'Checking the file format…');
     const head = new Uint8Array(buf.slice(0, 64));
     const zipAt = head.findIndex((x, i) => x === 0x50 && head[i + 1] === 0x4b && head[i + 2] === 3 && head[i + 3] === 4);
     // Money Manager backups: .mmbackup, or any zip (maybe renamed by a download) holding MyFinance.db
@@ -470,20 +507,35 @@ export async function importFile(f) {
         const bytes = await openBackup(text, pw);
         return importFile(new File([bytes], bytes[0] === 0x50 ? 'tally-backup.zip' : 'tally-backup.json'));
       }
+      await backupStage(work, 'Checking backup contents…');
+      const parsed = JSON.parse(text);
+      const { isMoney2TimeExport } = await import('../money2time.js');
+      if (isMoney2TimeExport(parsed)) return await importMoney2Time(text);
       return await restoreText(text);
     }
     // Money Manager by Realbyte (.mmbak): SQLite, bare or zipped
     if (/\.mmbak$/i.test(f.name) || new TextDecoder().decode(head.slice(0, 15)) === 'SQLite format 3') { kind = 'Money Manager'; return await importMoneyManager(buf, 'realbyte'); }
     if (zipAt === 0) {
+      await backupStage(work, 'Opening the backup ZIP…');
       const names = [];
-      const z = await unzip(buf, n => (names.push(n), n === BACKUP_JSON || /^photos\/[\w-]{1,60}\.jpg$/.test(n))).catch(() => ({}));
-      if (z[BACKUP_JSON]) return await restoreText(jsonText(z[BACKUP_JSON]), z);
+      const safe = n => !n.includes('\\') && !n.split('/').some(x => x === '.' || x === '..') && n.split('/').length <= 7;
+      const z = await unzip(buf, n => (names.push(n), safe(n) && (n.endsWith(BACKUP_JSON) || /(?:^|\/)photos\/[\w-]{1,60}\.jpg$/.test(n))), {
+        onEntry: async (index,total) => { if (index===1 || index%20===0 || index===total) await backupStage(work, 'Reading ZIP entries… {0} of {1}', index,total); }
+      });
+      const backups = Object.keys(z).filter(n => n === BACKUP_JSON || n.endsWith('/'+BACKUP_JSON));
+      if (backups.length > 1) throw new Error(t('This ZIP contains more than one Tally backup. Choose a ZIP with one backup.'));
+      if (backups.length) {
+        const name=backups[0], prefix=name.slice(0,-BACKUP_JSON.length), files=Object.fromEntries(Object.entries(z).filter(([n])=>n.startsWith(prefix)).map(([n,b])=>[n.slice(prefix.length),b]));
+        return await restoreText(jsonText(files[BACKUP_JSON]), files);
+      }
       if (names.includes('MyFinance.db')) { kind = 'Money Manager'; return await importMoneyManager(buf); }   // a .mmbackup renamed .zip (Telegram, Drive)
-      if (names.length && !names.some(n => n.startsWith('xl/'))) { kind = 'Money Manager'; return await importMoneyManager(buf, 'realbyte'); }   // a renamed .mmbak
+      if(names.some(n=>/\.(?:db|sqlite3?|mmbak)$/i.test(n))){ kind='Money Manager';return await importMoneyManager(buf,'realbyte'); }
+      if (names.length && !names.some(n => n.startsWith('xl/'))) throw new Error(t('This ZIP is not a supported backup. Keep the original backup ZIP with its photos; extracting only JSON can leave photos behind.'));
     }
     if (new TextDecoder().decode(buf.slice(0, 5)) === '%PDF-') return await importStatement(buf);
     await startMapping(await fileToRows(f.name, buf), f.name);
-  } catch (e) { console.error(e); impErr(kind === 'Money Manager' ? t('This looks like a Money Manager backup, but it could not be read: {0}', t(e.message)) : t(e.message)); }
+  } catch (e) { if(!e?.cancelled){ console.error(e); const message=e.message==='bad zip'?'This backup ZIP is damaged or could not be read. Nothing was imported.':e.message; impErr(kind === 'Money Manager' ? t('This looks like a Money Manager backup, but it could not be read: {0}', t(message)) : t(message)); } }
+  finally { finishBackupWork(work); }
 }
 /** `sheet`: pasted cells or a Google Sheets link. Its new account is named "Google Sheet" (or by its Account column),
  *  and the next paste goes into the account the last one used. */
@@ -565,8 +617,9 @@ function showMapping() {
     ${acc.values.length ? `<p class="fine">${esc(t('Accounts from this column: {0}', acc.values.map(a => (a.isNew ? t('{0} (new)', a.v) : a.v)).join(', ')))}</p>` : ''}
     ${map.account == null || acc.blanks ? intoAcc : ''}
     ${Object.keys(choices).length ? `<details open><summary>${esc(t('Their categories → Tally categories'))}</summary><div class="grid2">${Object.entries(choices).map(([s, v]) => `<label class="field"><span>${esc(s)}</span><select data-input="imp-cat" data-src="${esc(s)}">${cats.map(c => `<option value="${esc(c.id)}"${v === c.id ? ' selected' : ''}>${esc(t(c.name))}</option>`).join('')}<option value="${esc(`new:${s}`)}"${v === `new:${s}` ? ' selected' : ''}>${esc(t('New category: {0}', s))}</option></select></label>`).join('')}</div></details>` : ''}
-    ${fresh.length || !dups.length ? `<p class="${fresh.length ? 'okbox' : 'warnbox'}">${esc(t('{0} ready to import', fresh.length))}${dups.length ? ` · ${esc(t('{0} already in Tally, will be skipped', dups.length))}` : ''}${(k => (k.length ? ` · ${esc(k.length === 1 ? t('1 row skipped (no date or amount)') : t('{0} rows skipped (no date or amount)', k.length))}` : ''))(skipped.filter(x => !['currency', 'unpaid'].includes(x.why)))}</p>
-    ${(k => (k ? `<p class="warnbox">${ICON.alert}<span>${esc(t('{0} rows are in another currency (SGD…) and were left out. Add an account in that currency (Settings → Accounts), then import them into it.', k))}</span></p>` : ''))(skipped.filter(x => x.why === 'currency').length)}
+    ${fresh.length || !dups.length ? `<p class="${fresh.length ? 'okbox' : 'warnbox'}">${esc(t('{0} ready to import', fresh.length))}${dups.length ? ` · ${esc(t('{0} already in Tally, will be skipped', dups.length))}` : ''}${(k => (k.length ? ` · ${esc(k.length === 1 ? t('1 row skipped (no date or amount)') : t('{0} rows skipped (no date or amount)', k.length))}` : ''))(skipped.filter(x => !['currency', 'unpaid', 'type'].includes(x.why)))}</p>
+    ${(k => (k ? `<p class="warnbox">${ICON.alert}<span>${esc(t('{0} rows use another or unreadable currency and were left out. This import cannot safely convert them.', k))}</span></p>` : ''))(skipped.filter(x => x.why === 'currency').length)}
+    ${(k => (k ? `<p class="warnbox">${ICON.alert}<span>${esc(t('{0} rows have unknown transaction types and were left out.', k))}</span></p>` : ''))(skipped.filter(x => x.why === 'type').length)}
     ${(k => (k ? `<p class="fine">${esc(t('{0} unpaid rows (Paid? not ticked) left out.', k))}</p>` : ''))(skipped.filter(x => x.why === 'unpaid').length)}
     ${(k => (k ? `<p class="warnbox">${ICON.alert}<span>${esc(t('{0} rows are for accounts after the first 20 and were left out. Import them from a file with fewer accounts.', k))}</span></p>` : ''))(skipped.filter(x => x.why === 'account').length)}
     ${!fresh.length && !dups.length && !skipped.some(x => ['currency', 'unpaid', 'failed', 'account'].includes(x.why)) ? `<p class="fine">${esc(IMP.map.date == null ? t('No date column found. Pick it above, or open the tab with your transactions.') : (IMP.map.amount ?? IMP.map.debit ?? IMP.map.credit) == null ? t('No amount column found. Pick it above.') : t('This looks like a summary or budget, not a list of transactions. Open the tab with your transactions, or pick the columns above.'))}</p>` : ''}`
@@ -595,23 +648,23 @@ function planMoves(fresh, accounts, otherId) {
  * Undo takes everything back: the rows, the transfers (restoring what they replaced), photos, new accounts, openings.
  * `before(fresh)` runs first (photos) and returns photo ids to remove again on Undo. → the ids of the accounts it touched.
  */
-async function commitImport(txs, label, { before = async () => [], accounts = [], kv = {}, newAccounts = [], undoMore = async () => {}, tourLater = false } = {}) {
-  const split = splitDups(S.tx, txs, Object.fromEntries([...S.accounts, ...accounts].map(a => [a.id, a.name]))), { dups } = split;
-  const outside = S.accounts.find(a => a.outside), { relink, taken } = outside ? relinkReloads(S.tx, split.fresh, outside.id) : { relink: [], taken: new Set() };
+async function commitImport(txs, label, { before = async () => [], accounts = [], kv = {}, newAccounts = [], undoMore = async () => {}, tourLater = false, structured = false, receipts = [], expected = {}, beforeCommit = () => {}, undoKv = () => ({}) } = {}) {
+  const split = structured ? structuredSplit(S.tx, txs) : splitDups(S.tx, txs, Object.fromEntries([...S.accounts, ...accounts].map(a => [a.id, a.name]))), { dups } = split;
+  const outside = S.accounts.find(a => a.outside), { relink, taken } = outside && !structured ? relinkReloads(S.tx, split.fresh, outside.id) : { relink: [], taken: new Set() };
   const fresh = split.fresh.filter(x => !taken.has(x.id));   // reloads the wallet's file already had: now from this bank
   const photoIds = await before(fresh);
   const other = S.accounts.find(a => a.outside) || { id: uid('a'), name: t('Other bank'), kind: 'bank', opening: 0, outside: true, createdAt: Date.now() };
-  if (![...S.accounts, ...accounts].some(a => a.kind === 'cash' && !a.outside) && fresh.some(isAtm)) {   // withdrawals need a wallet to go into; its balance is the user's to give
+  if (!structured && ![...S.accounts, ...accounts].some(a => a.kind === 'cash' && !a.outside) && fresh.some(isAtm)) {   // withdrawals need a wallet to go into; its balance is the user's to give
     const cash = { id: uid('a'), name: t('Cash'), kind: 'cash', opening: 0, typed: false, createdAt: Date.now() };
     accounts = [...accounts, cash]; newAccounts = [...newAccounts, cash.id];
   }
-  const { pairs, paired, reloads } = planMoves(fresh, [...S.accounts, ...accounts], other.id), moved = new Set(reloads.map(x => x.id));
+  const { pairs, paired, reloads } = structured ? { pairs: [], paired: new Set(), reloads: [] } : planMoves(fresh, [...S.accounts, ...accounts], other.id), moved = new Set(reloads.map(x => x.id));
   if (reloads.some(x => x.accountId === other.id) && !S.accounts.includes(other)) { accounts = [...accounts, other]; newAccounts = [...newAccounts, other.id]; }
   const relinked = new Set(relink.map(x => x.id));
   const replaced = S.tx.filter(x => paired.has(x.id) || relinked.has(x.id)), save = [...fresh.filter(x => !paired.has(x.id) && !moved.has(x.id)), ...pairs.map(asTransfer), ...reloads, ...relink];
   const kept = new Set(save.map(x => x.id)), gone = replaced.filter(x => !kept.has(x.id)).map(x => x.id);
   const used = new Set(save.flatMap(x => [x.accountId, x.toAccountId]).filter(Boolean));
-  const stagedAccounts = accounts.filter(a => !newAccounts.includes(a.id) || used.has(a.id));
+  const stagedAccounts = accounts.filter(a => structured || !newAccounts.includes(a.id) || used.has(a.id));
   const was = new Set(replaced.map(x => x.id)), shift = typedShift(S.accounts, S.tx, save.filter(x => !was.has(x.id)), today()), shifted = S.accounts.filter(a => shift[a.id]);
   for (const a of shifted) { const i = stagedAccounts.findIndex(x => x.id === a.id), base = i >= 0 ? stagedAccounts[i] : a, next = { ...base, opening: (base.opening || 0) + shift[a.id], updatedAt: Date.now() }; if (i >= 0) stagedAccounts[i] = next; else stagedAccounts.push(next); }
   const first = !settings().onboarded;
@@ -621,14 +674,15 @@ async function commitImport(txs, label, { before = async () => [], accounts = []
   if (overCapAfter({ accounts: S.accounts, tx: S.tx, recurring: S.recurring, customCats: S.kv.customCats }, { accounts: stagedAccounts, tx: save, customCats: stagedKv.customCats }, { tx: gone, accounts: empty.map(a => a.id) })) {
     await deletePhotos(photoIds); throw new Error(t("Adding this would make Tally's data more than a backup can restore, so nothing was added."));
   }
-  try { await putAll({ accounts: stagedAccounts, tx: save, del: { tx: gone, accounts: empty.map(a => a.id) }, kv: stagedKv, edit: true }); }   // joint rows sync like any edit
+  beforeCommit();
+  try { await putAll({ accounts: stagedAccounts, tx: save, del: { tx: gone, accounts: empty.map(a => a.id) }, kv: stagedKv, receipts, expected, beforeWrite: beforeCommit, edit: true }); }   // joint rows sync like any edit
   catch (e) { await deletePhotos(photoIds); throw e; }
   if (first && !tourLater) afterSetup();
   closeSheet(); go('home'); render();
   toast(t('Imported {0} from {1}', fresh.length, label) + (dups.length ? ` · ${t('{0} already here, skipped', dups.length)}` : '') + (pairs.length + relink.length ? ` · ${t('{0} top-ups counted as transfers between your accounts', pairs.length + relink.length)}` : '')
     + (reloads.length ? ` · ${t('{0} wallet reloads with no bank line: counted as money moved from your bank, not as income.', reloads.length)}` : ''), { undo: !save.length ? null : async () => {
-    await putAll({ accounts: [...shifted, ...empty], tx: replaced, del: { tx: save.map(x => x.id), accounts: newAccounts.filter(id => !S.tx.some(x => !kept.has(x.id) && (x.accountId === id || x.toAccountId === id))) }, edit: true, mark: false });   // the import's own rows, seconds old and never shared: no delete markers (1000 of them pushed out real ones)
-    await deletePhotos(photoIds);
+    await putAll({ accounts: [...shifted, ...empty], tx: replaced, kv: undoKv(), del: { tx: save.map(x => x.id), accounts: newAccounts.filter(id => !S.tx.some(x => !kept.has(x.id) && (x.accountId === id || x.toAccountId === id))) }, edit: true, mark: false });   // the import's own rows, seconds old and never shared: no delete markers (1000 of them pushed out real ones)
+    await deletePhotos([...photoIds, ...receipts.map(p => p.id)]);
     await undoMore(); render();
   } });
   return [...used].filter(id => id !== other.id);
@@ -650,6 +704,91 @@ function balanceTodaySheet(ids, onClose) {
 }
 /** Money Manager backups: Innim (.mmbackup) or, with app 'realbyte', Realbyte (.mmbak). An Innim-looking zip without
  *  MyFinance.db gets a second try as Realbyte. */
+function structuredSplit(existing, rows) {
+  const ids = new Set(existing.map(x => x.id)), fresh = [], dups = [];
+  for (const row of rows) (ids.has(row.id) ? dups : fresh).push(row);
+  return { fresh, dups };
+}
+async function importMoney2Time(text) {
+  const { readMoney2Time } = await import('../money2time.js');
+  const mm = readMoney2Time(text);
+  IMP = { mm, generation: bookGeneration() };
+  openSheet(`<h2 class="sh-title">Money2Time JSON v3</h2>
+    <p class="warnbox">${esc(t('Only MYR entries, accounts, categories, subcategories and attached receipts are supported. Active splits, linked repayments, loans, budgets and recurring entries stop the import.'))}</p>
+    <ul class="list"><li>${esc(t('{0} transactions', mm.tx.length))}</li><li>${esc(t('{0} accounts: {1}', mm.accounts.length, mm.accounts.map(a => a.name).join(', ')))}</li><li>${esc(t('Contents: {0} entries and {1} receipt photos.', mm.tx.length, mm.photos.length))}</li></ul>
+    <p class="warnbox">${esc(t('Settings, account groups and category icons are left out. Saved transaction amounts are kept exactly. Check the preview before saving.'))}</p>
+    ${mm.settledSplits ? `<p class="warnbox">${esc(t('Settled split history is not recreated. Saved transaction amounts are kept; no repayment is added.'))}</p>` : ''}
+    ${mm.deleted ? `<p class="fine">${esc(t('Deleted transactions are not imported.'))}</p>` : ''}
+    <p class="fine">${esc(t('Receipt photos must all decode successfully. Entries and photos are saved together; a failure saves nothing.'))}</p>
+    <p class="err" id="m2-err" role="alert"></p>
+    <div class="row2"><button class="btn ghost" data-act="sheet-close">${esc(t('Cancel'))}</button><button class="btn" data-act="m2-go">${esc(t('Import'))}</button></div>`, { label: t('Import') });
+}
+async function saveMoney2Time(b) {
+  b.disabled = true;
+  const work = beginBackupWork('Import');
+  try {
+    await backupStage(work, 'Checking backup contents…');
+    const preview = IMP;
+    if (preview.generation !== bookGeneration()) throw new Error(t('The entry changed on your phone. Refresh and try again.'));
+    const db = await import('../db.js'), keys = ['bookGeneration','settings','customCats','subcats'];
+    const kvExpected = await Promise.all(keys.map(async key => ({ id: key, value: (await db.get('kv', key)) ?? undefined })));
+    for (const row of kvExpected) {
+      const fallback = row.id === 'customCats' ? [] : row.id === 'settings' || row.id === 'subcats' ? {} : undefined;
+      if (JSON.stringify(row.value?.value ?? fallback) !== JSON.stringify(S.kv[row.id] ?? fallback)) throw new Error(t('The entry changed on your phone. Refresh and try again.'));
+    }
+    if (preview.generation !== bookGeneration()) throw new Error(t('The entry changed on your phone. Refresh and try again.'));
+    const mm = structuredClone(preview.mm), oldCats = S.kv.customCats || [], remap = new Map(), cats = [];
+    for (const c of mm.customCats) {
+      const existing = oldCats.find(x => x.id === c.id);
+      if (existing && (existing.name !== c.name || (existing.kind || 'expense') !== (c.kind || 'expense'))) throw new Error(t('The entry changed on your phone. Refresh and try again.'));
+      const match = existing?.id || sameCategory(c.name, oldCats, c.kind === 'income');
+      if (match) remap.set(c.id, match); else cats.push(c);
+    }
+    if (oldCats.length + cats.length > 50) throw new Error(t("Adding this would make Tally's data more than a backup can restore, so nothing was added."));
+    for (const x of mm.tx) if (remap.has(x.category)) x.category = remap.get(x.category);
+    const beforeSubs = structuredClone(S.kv.subcats || {}), subcats = structuredClone(beforeSubs);
+    for (const [from, names] of Object.entries(mm.subcats)) {
+      const key = remap.get(from) || from, merged = [...new Set([...(subcats[key] || []), ...names])];
+      if (merged.length > 30) throw new Error(t("Adding this would make Tally's data more than a backup can restore, so nothing was added."));
+      subcats[key] = merged;
+    }
+    if (Object.keys(subcats).length > 80) throw new Error(t("Adding this would make Tally's data more than a backup can restore, so nothing was added."));
+    // Source IDs own these accounts. Name matching could merge unrelated books and lose their openings.
+    for (const a of mm.accounts) {
+      const old = S.accounts.find(x => x.id === a.id);
+      if (old && ((old.currency || 'MYR') !== 'MYR' || old.kind !== a.kind)) throw new Error(t('The entry changed on your phone. Refresh and try again.'));
+    }
+    const accounts = mm.accounts.filter(a => !S.accounts.some(x => x.id === a.id));
+    const had = new Set(S.tx.map(x => x.id)), fresh = mm.tx.filter(x => !had.has(x.id)), want = new Map(fresh.map(x => [x.id, x])), receipts = [];
+    const expected = {
+      accounts: [...S.accounts.map(x => ({ id: x.id, value: structuredClone(x) })), ...accounts.map(x => ({ id: x.id, value: undefined }))],
+      tx: [...S.tx.map(x => ({ id: x.id, value: structuredClone(x) })), ...fresh.map(x => ({ id: x.id, value: undefined }))],
+      kv: kvExpected, receipts: []
+    };
+    if (mm.photos.length && storageMode() === 'localstorage') throw new Error(t('Receipt photos must all decode successfully. Entries and photos are saved together; a failure saves nothing.'));
+    let decoded=0;
+    await backupStage(work, 'Checking receipt photos… {0} of {1}', decoded,mm.photos.length);
+    for (const p of mm.photos) {
+      const blob = new Blob([p.bytes], { type: 'image/jpeg' });
+      let bmp;
+      try { bmp = await createImageBitmap(blob); if (bmp.width !== p.width || bmp.height !== p.height || bmp.width * bmp.height > LIMITS.pixels) throw new Error('dimensions'); }
+      catch { throw new Error(t('Receipt photos must all decode successfully. Entries and photos are saved together; a failure saves nothing.')); }
+      finally { bmp?.close?.(); }
+      ++decoded; if(decoded%10===0 || decoded===mm.photos.length)await backupStage(work, 'Checking receipt photos… {0} of {1}', decoded,mm.photos.length); else checkBackupWork(work);
+      const txIds = p.txIds.filter(id => want.has(id));
+      if (!txIds.length) continue;
+      const receiptId = uid('p'); receipts.push({ id: receiptId, blob }); expected.receipts.push({ id: receiptId, value: undefined });
+      for (const id of txIds) want.get(id).receiptId = receiptId;
+    }
+    // commitImport recalculates duplicate IDs but uses these same row objects and explicit guards.
+    if (IMP !== preview) throw new Error(t('The entry changed on your phone. Refresh and try again.'));
+    await backupStage(work, 'Saving entries and photos together…');
+    await commitImport(mm.tx, 'Money2Time', { structured: true, accounts, newAccounts: accounts.map(a => a.id), receipts, expected, beforeCommit: () => { checkBackupWork(work); },
+      undoKv: () => money2TimeUndoKv(mm.tx,cats,beforeSubs,subcats),
+      kv: { customCats: [...oldCats, ...cats], subcats } });
+  } catch (e) { const el = $('#m2-err'); if (!e?.cancelled && el) el.textContent = t(e.message); b.disabled = false; }
+  finally { finishBackupWork(work); }
+}
 async function importMoneyManager(buf, app) {
   impErr(t('Reading the Money Manager backup…'));
   const { loadSqlJs, readMoneyManager, readRealbyte } = await import('../mmimport.js');
@@ -732,17 +871,21 @@ async function reencode(blob) {
 // ---- restore -------------------------------------------------------------------------------------------------------------
 async function restoreText(text, zip = {}) {
   let data;
-  try { data = readBackup(text); } catch (e) { return impErr(t(e.message)); }
+  const reading = beginBackupWork('Restore backup');
+  try { await backupStage(reading, 'Checking backup contents…'); data = readBackup(text); } catch (e) { if(!e?.cancelled)return impErr(t(e.message)); return; }
+  finally { finishBackupWork(reading); }
   if (data.joint) return importJoint(data, zip);
+  const guard = await restoreSnapshot();
+  checkBackupWork(reading);
   // Plan sample removal without writing: cancel or a failed restore must leave the old book intact.
-  const sample = settings().sample ? sampleRows() : null;
+  const sample = guard.book.kv.settings?.sample ? sampleRows() : null;
   if (sample?.tx.some(x => !x.sample) && !(await confirmSheet({ title: t('Remove the sample data?'), body: t('Entries you added to the sample accounts go too.'), ok: t('Remove') }))) return;
   const removed = { accounts: [...(sample?.ids || [])], tx: (sample?.tx || []).map(x => x.id), recurring: (sample?.recurring || []).map(x => x.id) };
   const keep = (list, store) => list.filter(x => !removed[store].includes(x.id));
-  const local = { accounts: keep(S.accounts, 'accounts'), tx: keep(S.tx, 'tx'), recurring: keep(S.recurring, 'recurring'), kv: {
-    budgets: sample ? { total: 0, byCat: {} } : S.kv.budgets, rules: S.kv.rules, customCats: S.kv.customCats,
-    shopNames: S.kv.shopNames || {}, itemNames: S.kv.itemNames || {}, goals: sample ? S.kv.goals.filter(g => !g.sample && !sample.ids.has(g.accountId)) : S.kv.goals,
-    subcats: S.kv.subcats || {}, subRules: S.kv.subRules || {}, catColors: S.kv.catColors || {}, catIcons: S.kv.catIcons || {}, dismissed: S.kv.dismissed,
+  const local = { accounts: keep(guard.book.accounts, 'accounts'), tx: keep(guard.book.tx, 'tx'), recurring: keep(guard.book.recurring, 'recurring'), kv: {
+    budgets: sample ? { total: 0, byCat: {} } : guard.book.kv.budgets, rules: guard.book.kv.rules, customCats: guard.book.kv.customCats,
+    shopNames: guard.book.kv.shopNames || {}, itemNames: guard.book.kv.itemNames || {}, goals: sample ? guard.book.kv.goals.filter(g => !g.sample && !sample.ids.has(g.accountId)) : guard.book.kv.goals,
+    subcats: guard.book.kv.subcats || {}, subRules: guard.book.kv.subRules || {}, catColors: guard.book.kv.catColors || {}, catIcons: guard.book.kv.catIcons || {}, dismissed: guard.book.kv.dismissed,
   } };
   const choice = local.tx.length || local.accounts.length ? await new Promise(res => {
     openSheet(`<h2 class="sh-title">${esc(t('Restore backup'))}</h2><p class="sh-body">${esc(t('The backup has {0} transactions. This phone has {1}.', data.tx.length, local.tx.length))}</p>
@@ -750,26 +893,34 @@ async function restoreText(text, zip = {}) {
       .addEventListener('click', e => { const b = e.target.closest('[data-x]'); if (b) { res(b.dataset.x); closeSheet(); } });
   }) : 'replace';
   if (choice === 'no') return;
+  closeSheet();
+  const work = beginBackupWork('Restore backup');
+  try {
   const before = choice === 'merge' ? local.tx : [], had = new Set(before.map(x => x.id));
   const restored = choice === 'merge' ? mergeBackup(local, data) : data;
   if (choice === 'merge' && overCap({ ...restored, customCats: restored.kv.customCats })) return impErr(t("Adding this would make Tally's data more than a backup can restore, so nothing was added."));
   // Decode every requested image before the transaction. Ledger, images and restore metadata then land together.
   const wanted = photosToWrite(data.tx.filter(x => !had.has(x.id)), before), receipts = [];
-  let missing = 0;
+  let missing = 0, decoded = 0;
+  await backupStage(work, 'Checking receipt photos… {0} of {1}',decoded,wanted.size);
   for (const id of wanted) {
     const bytes = zip[`photos/${id}.jpg`];
     const jpeg = bytes && await reencode(new Blob([bytes]));
     if (jpeg) receipts.push({ id, blob: jpeg }); else missing++;
+    ++decoded; if(decoded%10===0 || decoded===wanted.size)await backupStage(work, 'Checking receipt photos… {0} of {1}',decoded,wanted.size);else checkBackupWork(work);
   }
-  const cur = { ...settings() };
+  if(missing && Object.keys(zip).length)throw new Error(t('Some receipt photos are missing or unreadable. Nothing was restored.'));
+  if(missing && !(await confirmSheet({title:t('Receipt photos'),body:t('This JSON backup has receipt links but no photos. Restore entries without those photos?'),ok:t('Restore')})))return;
+  await backupStage(work, 'Saving entries and photos together…');
+  const cur = { ...(guard.book.kv.settings || {}) };
   if (sample) { delete cur.noSpend; delete cur.friends; cur.sample = false; }
   const want = Object.entries(data.settings || {}).filter(([k]) => choice !== 'merge' || cur[k] == null);
   restored.kv = { ...restored.kv, settings: { ...cur, ...Object.fromEntries(want), onboarded: true }, lastBackup: `${today()}T${nowTime()}` };
   if (choice === 'merge') {
     const keptPhotos = new Set(local.tx.map(x => x.receiptId).filter(Boolean));
     const gonePhotos = [...new Set((sample?.tx || []).map(x => x.receiptId).filter(id => id && !keptPhotos.has(id)))];
-    await addAll({ ...restored, receipts, del: { ...removed, receipts: gonePhotos } });
-  } else await replaceAll({ ...restored, receipts });
+    await addAll({ ...restored, receipts, expected:guard.expected, expectedKeys:guard.expectedKeys, beforeWrite:()=>commitBackupWork(work), del: { ...removed, receipts: gonePhotos } });
+  } else await replaceAll({ ...restored, receipts, expected:guard.expected, expectedKeys:guard.expectedKeys, beforeWrite:()=>commitBackupWork(work) });
   if (settings().lang && settings().lang !== getLang()) setLang(settings().lang);
   document.documentElement.style.fontSize = `${settings().textSize || 100}%`; applyLook(settings());
   if (!settings().tourDone) await markSeen();   // a restored backup means someone who knows the app
@@ -777,6 +928,7 @@ async function restoreText(text, zip = {}) {
   persistStorage();
   closeSheet(); go('home'); render();
   toast(t('Restored {0} transactions', data.tx.length) + (data.dropped ? ` · ${t('{0} damaged entries skipped', data.dropped)}` : '') + (missing ? ` · ${t('{0} could not be read and will be skipped', `${missing} ${t('Receipt photos')}`)}` : ''), { k: missing ? 'warn' : 'good' });
+  } finally { finishBackupWork(work); }
 }
 
 /** The backup, as JSON, or with photos as a zip holding the same JSON plus photos/<id>.jpg. */
@@ -1178,16 +1330,23 @@ export const act = {
     } });
     if (blind) setTimeout(() => balanceTodaySheet(touched.filter(id => !known(id)), first ? afterSetup : undefined), 300);   // after the move to Home settles (like the tour)
   },
+  'm2-go': saveMoney2Time,
   'mm-go': async b => {
     b.disabled = true;
     const { buf } = IMP, withPhotos = $('#mm-photos')?.checked;
+    let photoSkipped = 0;
     // The same ledger from another format (its Excel export first): same-named accounts are the ones already here.
-    const here = new Map(S.accounts.map(a => [norm(a.name), a.id])), same = id => (!S.accounts.some(a => a.id === id) && here.get(norm(IMP.mm.accounts.find(a => a.id === id)?.name))) || id;
+    const accountKey = a => JSON.stringify([norm(a.name), a.currency || 'MYR', a.kind]);
+    const here = new Map(S.accounts.map(a => [accountKey(a), a.id])), same = id => {
+      const incoming = IMP.mm.accounts.find(a => a.id === id), existing = S.accounts.find(a => a.id === id);
+      if (existing && incoming && ((existing.currency || 'MYR') !== (incoming.currency || 'MYR') || existing.kind !== incoming.kind)) throw new Error('This imported account differs from the account already here. Nothing was imported.');
+      return (!existing && incoming && here.get(accountKey(incoming))) || id;
+    };
     const mm = { ...IMP.mm, tx: IMP.mm.tx.map(x => ({ ...x, accountId: same(x.accountId), ...(x.toAccountId ? { toAccountId: same(x.toAccountId) } : {}) })) };
-    const fresh = splitDups(S.tx, mm.tx, Object.fromEntries([...S.accounts, ...mm.accounts].map(a => [a.id, a.name]))).fresh, used = new Set(fresh.flatMap(x => [x.accountId, x.toAccountId]).filter(Boolean));
-    const accounts = mm.accounts.filter(a => used.has(a.id) && !S.accounts.some(x => x.id === a.id));
+    const fresh = structuredSplit(S.tx, mm.tx).fresh;
+    const accounts = mm.accounts.filter(a => same(a.id) === a.id && !S.accounts.some(x => x.id === a.id));
     const cats = fitCats(S.kv.customCats, mm.customCats, fresh, mm.tx);   // 50 of the user's own at most, counting those already here
-    await commitImport(mm.tx, mm.app === 'cashew' ? 'Cashew' : mm.app === 'realbyte' ? 'Money Manager (Realbyte)' : 'Money Manager', { accounts, newAccounts: accounts.map(a => a.id), kv: cats.length ? { customCats: [...S.kv.customCats, ...cats] } : {}, before: async fresh => {
+    await commitImport(mm.tx, mm.app === 'cashew' ? 'Cashew' : mm.app === 'realbyte' ? 'Money Manager (Realbyte)' : 'Money Manager', { structured: true, accounts, newAccounts: accounts.map(a => a.id), kv: cats.length ? { customCats: [...S.kv.customCats, ...cats] } : {}, before: async fresh => {
       if (!withPhotos) return [];
       const { readPhotos } = await import('../mmimport.js');
       const want = new Map(fresh.map(x => [x.id, x]));
@@ -1197,9 +1356,9 @@ export const act = {
         if (n % 25 === 0) toast(t('Copying photos… {0} of {1}', n, todo.length));
         const bytes = files[p.path];
         const jpeg = bytes && await reencode(new Blob([bytes], { type: 'image/jpeg' }));
-        if (!jpeg) continue;
+        if (!jpeg) { photoSkipped++; continue; }
         const id = uid('p');
-        if (!(await savePhoto(id, jpeg))) continue;
+        if (!(await savePhoto(id, jpeg))) { photoSkipped++; continue; }
         ids.push(id);
         for (const txId of p.txIds) want.get(txId).receiptId = id;   // a shared receiptId is safe: a photo is deleted only when no row uses it
       }
@@ -1207,6 +1366,7 @@ export const act = {
     }, undoMore: async () => {
       if (cats.length) await setKv('customCats', S.kv.customCats.filter(c => !cats.some(n => n.id === c.id) || S.tx.some(x => x.category === c.id)));
     } });
+    if (photoSkipped) toast(t('{0} could not be read and will be skipped', `${photoSkipped} ${t('Receipt photos')}`), { k: 'warn' });
   },
   'pdf-unlock': () => { const pw = $('#pdf-pw').value; if (pw) importStatement(IMP.pdf, pw).catch(e => impErr(e.message)); },
   'st-go': async b => {

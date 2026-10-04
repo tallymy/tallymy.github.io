@@ -9,7 +9,7 @@ globalThis.localStorage = { getItem: k => disk.get(k) ?? null, setItem: (k, v) =
 const { S, load, saveAccount, saveTx, setKv, replaceAll, settings } = await import('../js/state.js');
 const { sampleData, startSample, endSample, sampleRows } = await import('../js/sample.js');
 const { splitBill, ME } = await import('../js/views/splitbill.js');
-const { balances, openShares, goalProgress, taxRelief, reliefGuess, monthSpend, billStatus, owing, subSplit, affordMoney, affordCheck } = await import('../js/engine.js');
+const { balances, openShares, shareProgress, goalProgress, taxRelief, reliefGuess, monthSpend, billStatus, owing, subSplit, affordMoney, affordCheck } = await import('../js/engine.js');
 const { categoryOf } = await import('../js/brands.js');
 const { filledDays } = await import('../js/comic.js');
 
@@ -46,7 +46,13 @@ test('the split bills are what "Save my share" makes, to the sen; one friend has
   }
   const { owedMe, iOwe } = openShares(tx), dinner = bills.find(b => !b.owedTo), aisyah = tx.find(x => x.splitOf === dinner.id && x.owedBy === 'Aisyah').amount;
   assert.equal(owedMe.find(f => f.name === 'Aisyah').sen, aisyah - 2000, 'RM 20 of hers back');
-  assert.equal(owedMe.find(f => f.name === 'Wei Ling').sen, tx.find(x => x.owedBy === 'Wei Ling').amount);
+  assert.equal(owedMe.some(f => f.name === 'Wei Ling'), false, 'Wei Ling has paid her full saved share');
+  const progress=shareProgress(tx);
+  assert.deepEqual(progress.owedMe.map(f=>[f.name,f.status]).sort(), [['Aisyah','partial'],['Wei Ling','settled']]);
+  assert.equal(progress.iOwe.find(f=>f.name==='Hafiz').status,'unpaid');
+  const paid=tx.find(x=>x.repaidBy==='Wei Ling');
+  assert.equal(paid.amount,tx.find(x=>x.owedBy==='Wei Ling').amount);
+  assert.equal(monthSpend(tx,'2026-10').total,monthSpend(tx.filter(x=>x.id!==paid.id),'2026-10').total,'settlement never changes spending');
   assert.deepEqual(iOwe.map(f => [f.name, f.sen]), [['Hafiz', bills.find(b => b.owedTo).amount]]);
 });
 
@@ -116,7 +122,7 @@ test('can I afford it, as Home asks it: RM 200 yes, RM 450 tight from the lowest
   // The landing's example (start*.html, the "Can I afford it?" tile) is this one, on 17 Oct 2026.
   const d = sampleData('2026-10-17', Date.parse('2026-10-17T12:00:00Z')), { balance } = affordMoney(d.accounts, d.tx);
   const r = affordCheck({ price: 45000, balance, txs: d.tx, today: '2026-10-17', bills: d.recurring, budget: d.budgets.total });
-  assert.deepEqual([r.verdict, r.payDate, r.low.date, r.low.bal, r.left], ['tight', '2026-10-28', '2026-10-27', 14134, 284634]);
+  assert.deepEqual([r.verdict, r.payDate, r.low.date, r.low.bal, r.left], ['tight', '2026-10-28', '2026-10-27', 18226, 288726]);
 });
 
 test('the new features have something to show: the landing receipt, subcategories, the relief picker, zakat apart, and no real brands', () => {

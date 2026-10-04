@@ -60,9 +60,9 @@ async function zipOf(files) {
   for (const [name, raw, method, declared = raw.length] of files) {
     const data = method === 8 ? await deflate(raw) : raw;
     const n = enc(name), h = new DataView(new ArrayBuffer(30));
-    h.setUint32(0, 0x04034b50, true); h.setUint16(8, method, true); h.setUint32(18, data.length, true); h.setUint32(22, declared, true); h.setUint16(26, n.length, true);
+    h.setUint32(0, 0x04034b50, true); h.setUint32(14, IO.crc32(raw), true); h.setUint32(14, IO.crc32(raw), true); h.setUint16(8, method, true); h.setUint32(18, data.length, true); h.setUint32(22, declared, true); h.setUint16(26, n.length, true);
     const c = new DataView(new ArrayBuffer(46));
-    c.setUint32(0, 0x02014b50, true); c.setUint16(10, method, true); c.setUint32(20, data.length, true); c.setUint32(24, declared, true); c.setUint16(28, n.length, true); c.setUint32(42, off, true);
+    c.setUint32(0, 0x02014b50, true); c.setUint32(16, IO.crc32(raw), true); c.setUint32(16, IO.crc32(raw), true); c.setUint16(10, method, true); c.setUint32(20, data.length, true); c.setUint32(24, declared, true); c.setUint16(28, n.length, true); c.setUint32(42, off, true);
     parts.push(new Uint8Array(h.buffer), n, data); central.push(new Uint8Array(c.buffer), n);
     off += 30 + n.length + data.length;
   }

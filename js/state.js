@@ -396,25 +396,38 @@ export async function sweepPhotos() {
 const BACKUP_KV = ['budgets', 'rules', 'customCats', 'dismissed', 'shopNames', 'itemNames', 'catColors', 'catIcons', 'goals', 'subcats', 'subRules'];
 const kvRows = kv => Object.entries(kv || {}).filter(([k, v]) => KV_KEYS.includes(k) && v != null).map(([key, value]) => ({ key, value }));
 /** Replace everything with a backup, all or nothing: old photos and the settings a backup carries go too. */
-export async function replaceAll({ accounts, tx, recurring, kv, receipts = [] }) {
+/** Snapshot the displayed book plus stored KV. Atomic row/key guards detect edits, new rows and replacements during restore preparation. */
+export async function restoreSnapshot() {
+  const generation=bookGeneration() ?? undefined, book={accounts:structuredClone(S.accounts),tx:structuredClone(S.tx),recurring:structuredClone(S.recurring),kv:structuredClone(S.kv)};
+  const kv=await db.all('kv'), receiptKeys=await db.keys('receipts');
+  const storedGeneration=kv.find(r=>r.key==='bookGeneration')?.value ?? undefined;
+  if(generation!==(bookGeneration() ?? undefined) || generation!==storedGeneration)throw Object.assign(new Error('The entry changed on your phone. Refresh and try again.'),{code:'STALE'});
+  book.kv={...book.kv,...Object.fromEntries(kv.map(r=>[r.key,r.value]))};
+  const expected=Object.fromEntries(['accounts','tx','recurring'].map(store=>[store,book[store].map(value=>({id:value.id,value}))]));
+  expected.kv=kv.map(value=>({id:value.key,value}));
+  if(!kv.some(r=>r.key==='bookGeneration'))expected.kv.push({id:'bookGeneration',value:undefined});
+  const expectedKeys={accounts:book.accounts.map(r=>r.id),tx:book.tx.map(r=>r.id),recurring:book.recurring.map(r=>r.id),kv:kv.map(r=>r.key),receipts:receiptKeys};
+  return {book,expected,expectedKeys};
+}
+export async function replaceAll({ accounts, tx, recurring, kv, receipts = [], expected = {}, expectedKeys = {}, beforeWrite = () => {} }) {
   const nextKv = Object.fromEntries(Object.entries(kv || {}).filter(([key]) => !TRANSIENT_KV.includes(key)));
-  await db.writeAtomic({ clear: ['accounts', 'tx', 'recurring', 'receipts'], del: { kv: [...BACKUP_KV, ...TRANSIENT_KV] }, put: { accounts, tx, recurring, receipts, kv: kvRows({ ...nextKv, bookGeneration: uid('book_') }) } });
+  await db.writeAtomic({ clear: ['accounts', 'tx', 'recurring', 'receipts'], del: { kv: [...BACKUP_KV, ...TRANSIENT_KV] }, put: { accounts, tx, recurring, receipts, kv: kvRows({ ...nextKv, bookGeneration: uid('book_') }) }, expected, expectedKeys, beforeWrite });
   await load();
   if (typeof globalThis.document?.dispatchEvent === 'function') document.dispatchEvent(new Event('tally:book-replaced'));
 }
 /** Add a merged backup's new records and settings, all or nothing. Existing records are never rewritten. */
-export async function addAll({ accounts, tx, recurring, kv, receipts = [], del = {} }) {
+export async function addAll({ accounts, tx, recurring, kv, receipts = [], del = {}, expected = {}, expectedKeys = {}, beforeWrite = () => {} }) {
   const has = (list, ids) => list.filter(x => !ids.has(x.id));
   const kept = (list, store) => new Set(list.filter(x => !(del[store] || []).includes(x.id)).map(x => x.id));
   await db.writeAtomic({ del, put: {
     accounts: has(accounts, kept(S.accounts, 'accounts')), tx: has(tx, kept(S.tx, 'tx')),
     recurring: has(recurring, kept(S.recurring, 'recurring')), receipts, kv: kvRows(kv),
-  } });
+  }, expected, expectedKeys, beforeWrite });
   await load();
 }
 /** Write records as given, overwriting (a spouse's newer joint edits), all or nothing. `edit`: the user's own change
  *  (an import and its Undo), stamped and with joint delete markers like saveTxs and deleteTxs, in the same write. */
-export async function putAll({ accounts = [], tx = [], recurring = [], kv = {}, del = {}, edit = false, mark = true, expected = {} }) {
+export async function putAll({ accounts = [], tx = [], recurring = [], kv = {}, del = {}, edit = false, mark = true, expected = {}, receipts = [], beforeWrite = () => {} }) {
   if (edit) {
     // Only rows this write deletes and doesn't put back: a row put back next to its own marker was deleted by the next swap.
     const j = jointIds(), back = new Set(tx.map(t => t.id)), dead = new Set((del.tx || []).filter(id => !back.has(id)));
@@ -422,7 +435,7 @@ export async function putAll({ accounts = [], tx = [], recurring = [], kv = {}, 
     tx = tx.map(stamp);
     if (joint.length) kv = { ...kv, jointGone: withGone(joint) };
   }
-  await db.writeAtomic({ del, put: { accounts, tx, recurring, kv: kvRows(kv) }, expected });
+  await db.writeAtomic({ del, put: { accounts, tx, recurring, receipts, kv: kvRows(kv) }, expected, beforeWrite });
   await load();
 }
 /** The old address (it shares its site with another app): Tally has moved to NEW_HOME. */
