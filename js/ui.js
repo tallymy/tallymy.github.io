@@ -86,6 +86,7 @@ export function openSheet(html, { onClose, label = 'Dialog', stack = false } = {
   app?.setAttribute('inert', '');
   under?.setAttribute('inert', '');
   const sheet = wrap.querySelector('.sheet');
+  for (const ev of ['input', 'change']) sheet.addEventListener(ev, () => sheet.querySelectorAll('.err[role="alert"][id]').forEach(p => { if (p.textContent) p.textContent = ''; }));   // an id'd validation message is stale once any field is edited; server-rendered ones (split-bill) have no id and redraw themselves
   wrap.addEventListener('click', e => { if (e.target === wrap) closeSheet(); });
   wrap.addEventListener('keydown', e => {
     if (e.key === 'Escape') { e.preventDefault(); closeSheet(); }

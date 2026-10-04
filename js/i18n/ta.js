@@ -2062,4 +2062,5 @@ export default {
   "Savings goals are easier: choose where the money sits, or create a savings account right there, and tap a goal on Home to edit it": "சேமிப்பு இலக்குகள் இன்னும் எளிது: பணம் எங்கே இருக்கிறது என்பதைத் தேர்வு செய்யலாம், அல்லது அங்கேயே சேமிப்புக் கணக்கை உருவாக்கலாம்; முகப்பில் இலக்கைத் தட்டி திருத்தலாம்",
   "The camera button stays in the middle when you turn features off, and the features list stays open while you switch them": "அம்சங்களை அணைத்தாலும் கேமரா பொத்தான் நடுவிலேயே இருக்கும்; அம்சங்களை மாற்றும்போது பட்டியலும் திறந்தே இருக்கும்",
   "Privacy pages now explain the camera and connecting to your computer": "தனியுரிமைப் பக்கங்கள் இப்போது கேமரா பற்றியும் உங்கள் கணினியுடன் இணைப்பது பற்றியும் விளக்குகின்றன",
+  "Fixed a leftover red message in the savings goal form": "சேமிப்பு இலக்கு படிவத்தில் மீதமிருந்த சிவப்பு செய்தி சரிசெய்யப்பட்டது",
 };

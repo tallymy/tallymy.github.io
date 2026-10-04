@@ -2062,4 +2062,5 @@ export default {
   "Savings goals are easier: choose where the money sits, or create a savings account right there, and tap a goal on Home to edit it": "貯蓄目標がかんたんに：お金がある場所を選ぶか、その場で貯蓄口座を作れます。ホームで目標をタップすると編集できます",
   "The camera button stays in the middle when you turn features off, and the features list stays open while you switch them": "機能をオフにしてもカメラボタンは中央のままで、機能の一覧は切り替えている間ずっと開いたままです",
   "Privacy pages now explain the camera and connecting to your computer": "プライバシーのページに、カメラとパソコンへの接続についての説明を追加しました",
+  "Fixed a leftover red message in the savings goal form": "貯蓄目標フォームに赤いメッセージが残る不具合を修正しました",
 };

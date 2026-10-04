@@ -2062,4 +2062,5 @@ export default {
   "Savings goals are easier: choose where the money sits, or create a savings account right there, and tap a goal on Home to edit it": "儲蓄目標更簡單：選擇錢放在哪裡，或直接在那裡新增儲蓄帳戶，在首頁點一下目標就能編輯",
   "The camera button stays in the middle when you turn features off, and the features list stays open while you switch them": "關閉功能後相機按鈕仍在正中間，切換功能時功能清單也會一直保持展開",
   "Privacy pages now explain the camera and connecting to your computer": "隱私頁面現在說明了相機和連接電腦的方式",
+  "Fixed a leftover red message in the savings goal form": "修復了儲蓄目標表單中殘留的紅色提示",
 };

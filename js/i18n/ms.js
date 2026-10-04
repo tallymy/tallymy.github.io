@@ -2063,4 +2063,5 @@ export default {
   "Savings goals are easier: choose where the money sits, or create a savings account right there, and tap a goal on Home to edit it": "Matlamat simpanan lebih mudah: pilih tempat wang disimpan, atau cipta akaun simpanan di situ juga, dan ketik matlamat di Utama untuk mengeditnya",
   "The camera button stays in the middle when you turn features off, and the features list stays open while you switch them": "Butang kamera kekal di tengah apabila anda mematikan ciri, dan senarai ciri kekal terbuka semasa anda menukarnya",
   "Privacy pages now explain the camera and connecting to your computer": "Halaman privasi kini menerangkan tentang kamera dan sambungan ke komputer anda",
+  "Fixed a leftover red message in the savings goal form": "Mesej merah yang tertinggal dalam borang matlamat simpanan telah dibetulkan",
 };

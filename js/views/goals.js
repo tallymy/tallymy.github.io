@@ -75,6 +75,7 @@ function goalSheet(g = {}) {
     if (x !== 'save') return;
     const name = cleanText(el.querySelector('#g-name').value, 30), target = calcAmount(el.querySelector('#g-amt').value), by = el.querySelector('#g-by').value, accountId = el.querySelector('#g-acc').value;
     const err = m => { el.querySelector('#g-err').textContent = m; };
+    err('');
     if (!name) return err(t('Give the goal a name.'));
     if (!(target > 0)) return err(t('Enter an amount, for example 12.50.'));
     if (by && !validIso(by)) return err(t('Pick a date.'));
