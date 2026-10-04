@@ -1,5 +1,13 @@
 // Bahasa Melayu. Keys are the English text in the code; {0} {1} are filled in by t().
 export default {
+"1 photo": "1 foto",
+"The receipt reader could not start. Close Tally and try again.": "Pembaca resit tidak dapat dimulakan. Tutup Tally dan cuba lagi.",
+"{0} photos": "{0} foto",
+"Photo added": "Foto ditambah",
+"Could not take this photo. Try again.": "Tidak dapat mengambil foto ini. Cuba lagi.",
+"Cancel this photo": "Batal foto ini",
+"Cancel all": "Batal semua",
+"Read the {0} waiting photos": "Baca {0} foto yang menunggu",
 "Preparing the backup…": "Menyediakan sandaran…",
 "Collecting receipt photos… {0} of {1}": "Mengumpulkan foto resit… {0} daripada {1}",
 "Creating the backup ZIP…": "Mencipta ZIP sandaran…",

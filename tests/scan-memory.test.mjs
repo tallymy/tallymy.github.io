@@ -15,7 +15,7 @@ async function run(failWarmup=false){
  const original={Worker:globalThis.Worker,document:globalThis.document,createImageBitmap:globalThis.createImageBitmap,ImageData:globalThis.ImageData,fetch:globalThis.fetch};
  globalThis.fetch=async()=>({ok:true,body:new ReadableStream({start(c){c.close();}})});
  globalThis.createImageBitmap=async()=>({width:4000,height:3000,close(){closed++;}});
- globalThis.document={createElement(){const canvas={width:1,height:1,toBlob(cb){cb(new Blob(['photo'],{type:'image/jpeg'}));},getContext(){return {drawImage(){},putImageData(){},getImageData(){return {width:canvas.width,height:canvas.height,data:new Uint8ClampedArray(canvas.width*canvas.height*4)};}};}};return canvas;}};
+ globalThis.document={createElement(){const canvas={width:1,height:1,toDataURL(){return 'data:image/jpeg;base64,cGhvdG8=';},toBlob(cb){cb(new Blob(['photo'],{type:'image/jpeg'}));},getContext(){return {drawImage(){},putImageData(){},getImageData(){return {width:canvas.width,height:canvas.height,data:new Uint8ClampedArray(canvas.width*canvas.height*4)};}};}};return canvas;}};
  globalThis.ImageData=class{constructor(data,width,height){Object.assign(this,{data,width,height});}};
  globalThis.Worker=class{
   postMessage(message,transfer){

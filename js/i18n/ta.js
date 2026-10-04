@@ -1,5 +1,13 @@
 // தமிழ் (Tamil). Keys are the English text in the code; {0} {1} are filled in by t().
 export default {
+"1 photo": "1 படம்",
+"The receipt reader could not start. Close Tally and try again.": "ரசீது படிப்பானைத் தொடங்க முடியவில்லை. Tally-ஐ மூடி மீண்டும் முயலவும்.",
+"{0} photos": "{0} படங்கள்",
+"Photo added": "படம் சேர்க்கப்பட்டது",
+"Could not take this photo. Try again.": "இந்தப் படத்தை எடுக்க முடியவில்லை. மீண்டும் முயலவும்.",
+"Cancel this photo": "இந்தப் படத்தை ரத்து செய்",
+"Cancel all": "அனைத்தையும் ரத்து செய்",
+"Read the {0} waiting photos": "காத்திருக்கும் {0} படங்களைப் படி",
 "Preparing the backup…": "காப்புப்பிரதியைத் தயாரிக்கிறது…",
 "Collecting receipt photos… {0} of {1}": "ரசீது படங்களைச் சேகரிக்கிறது… {1}-இல் {0}",
 "Creating the backup ZIP…": "காப்புப்பிரதி ZIP-ஐ உருவாக்குகிறது…",

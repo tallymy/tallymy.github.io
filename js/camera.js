@@ -1,6 +1,6 @@
 // Snap receipts inside Tally: a live camera with a shutter, several photos in a row, the light, and the gallery.
 import { t } from './i18n.js';
-import { esc, ICON, openSheet, closeSheet, $ } from './ui.js';
+import { esc, ICON, openSheet, closeSheet, $, reduced } from './ui.js';
 import { toGray, measure, hint } from './camcheck.js';
 
 const pickPhotos = () => $('#scan-input').click();
@@ -9,24 +9,26 @@ const pickPhotos = () => $('#scan-input').click();
 export function startScan(onFiles) {
   if (!navigator.mediaDevices?.getUserMedia) return pickPhotos();
   const shots = [];
-  let stream = null, closed = false;
+  let stream = null, closed = false, capturing = false, successTimer = 0;
   const el = openSheet(`<div class="cam-view"><video playsinline muted autoplay></video><div class="cam-guide" aria-hidden="true"></div>
       <p class="cam-msg" role="status">${esc(t('Fit the whole receipt inside the frame'))}</p></div>
     <div class="cam-top"><button class="cam-ic" data-c="close" aria-label="${esc(t('Close camera'))}">${ICON.x}</button>
+      <div class="cam-feedback"><b class="cam-count num" role="status" aria-live="polite" aria-atomic="true">${esc(t('{0} photos', 0))}</b><span class="cam-success" aria-hidden="true"></span></div>
       <button class="cam-ic" data-c="torch" aria-pressed="false" aria-label="${esc(t('Light'))}" hidden>${ICON.bolt}</button></div>
     <div class="cam-bar"><button class="cam-side" data-c="gallery">${ICON.image}<span>${esc(t('Gallery'))}</span></button>
       <button class="cam-shutter" data-c="snap" aria-label="${esc(t('Take a photo'))}" disabled></button>
       <button class="cam-side" data-c="done" disabled><b class="cam-n num"></b><span>${esc(t('Done'))}</span></button></div>`,
-  { label: t('Camera'), onClose: () => { closed = true; stream?.getTracks().forEach(tr => tr.stop()); if (shots.length) onFiles(shots); } });
+  { label: t('Camera'), onClose: () => { closed = true; clearTimeout(successTimer); stream?.getTracks().forEach(tr => tr.stop()); if (shots.length) onFiles(shots); } });
   el.closest('.scrim').classList.add('cam');
   const video = el.querySelector('video'), msg = el.querySelector('.cam-msg'), q = c => el.querySelector(`[data-c="${c}"]`);
 
   navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 3840 }, height: { ideal: 2160 } } }).then(s => {
     if (closed) return s.getTracks().forEach(tr => tr.stop());
     stream = s; video.srcObject = s;
-    video.addEventListener('loadedmetadata', () => { q('snap').disabled = false; q('snap').focus(); watchFrame(); }, { once: true });   // a tap before the first frame would take nothing
+    video.addEventListener('loadedmetadata', () => { if (closed) return; q('snap').disabled = false; q('snap').focus(); watchFrame(); }, { once: true });   // a tap before the first frame would take nothing
     if (s.getVideoTracks()[0].getCapabilities?.().torch) q('torch').hidden = false;
   }).catch(() => {
+    if (closed) return;
     msg.textContent = t("Tally can't use the camera. Allow the camera for Tally in your phone's or browser's settings, or pick photos from the gallery.");
     el.querySelector('.cam-view').classList.add('off');
     q('snap').hidden = q('done').hidden = true;   // no shutter to tap in vain: the gallery becomes the one big button
@@ -51,7 +53,7 @@ export function startScan(onFiles) {
     if (closed) return;
     let h = null;
     try { if (video.videoWidth && Date.now() > quiet) h = look(); } catch {}
-    if (h && h === seen && h !== shown) { shown = h; msg.textContent = say[h](); guide.classList.toggle('ok', h === 'ok'); guide.classList.toggle('warn', h !== 'ok'); }
+    if (h && h === seen && h !== shown) { shown = h; msg.setAttribute('aria-live', 'polite'); msg.textContent = say[h](); guide.classList.toggle('ok', h === 'ok'); guide.classList.toggle('warn', h !== 'ok'); }
     seen = h;
     setTimeout(watchFrame, 350);
   };
@@ -66,19 +68,31 @@ export function startScan(onFiles) {
       await stream.getVideoTracks()[0].applyConstraints({ advanced: [{ torch: on }] }).then(() => b.setAttribute('aria-pressed', on), () => {});
       return;
     }
-    if (c === 'snap' && video.videoWidth) {
-      // ponytail: a frame of the preview (up to 4K). ImageCapture.takePhoto gives full sensor resolution but is slow and flaky on some phones.
-      const cv = document.createElement('canvas');
-      cv.width = video.videoWidth; cv.height = video.videoHeight;
-      cv.getContext('2d').drawImage(video, 0, 0);
-      const blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.92));
-      if (!blob || closed) return;
-      shots.push(new File([blob], `receipt-${Date.now()}.jpg`, { type: 'image/jpeg' }));
-      el.querySelector('.cam-view').animate([{ opacity: .2 }, { opacity: 1 }], { duration: 180 });
-      el.querySelector('.cam-n').textContent = shots.length;
-      q('done').disabled = false;
-      msg.textContent = t('{0} taken. Snap the next receipt, or tap Done.', shots.length);
-      quiet = Date.now() + 2000; shown = null;   // let that be read before the hints come back
+    if (c === 'snap' && video.videoWidth && !closed && !capturing) {
+      capturing = true; q('snap').disabled = true;
+      const frame = document.createElement('canvas');
+      try {
+        frame.width = video.videoWidth; frame.height = video.videoHeight;
+        frame.getContext('2d').drawImage(video, 0, 0);
+        const blob = await new Promise(resolve => frame.toBlob(resolve, 'image/jpeg', 0.92));
+        if (!blob?.size || closed) return;
+        shots.push(new File([blob], `receipt-${Date.now()}.jpg`, { type: 'image/jpeg' }));
+        if (!reduced()) el.querySelector('.cam-view').animate([{ opacity: .2 }, { opacity: 1 }], { duration: 180 });
+        el.querySelector('.cam-count').textContent = shots.length === 1 ? t('1 photo') : t('{0} photos', shots.length);
+        el.querySelector('.cam-success').textContent = t('Photo added');
+        el.querySelector('.cam-n').textContent = shots.length;
+        q('done').disabled = false;
+        msg.setAttribute('aria-live', 'off'); // The changing top count announces each capture once; hints remain live.
+        msg.textContent = t('{0} taken. Snap the next receipt, or tap Done.', shots.length);
+        quiet = Date.now() + 2000; shown = null;
+        clearTimeout(successTimer);
+        successTimer = setTimeout(() => { if (!closed) el.querySelector('.cam-success').textContent = ''; }, 2000);
+      } catch {
+        if (!closed) { msg.setAttribute('aria-live', 'polite'); msg.textContent = t('Could not take this photo. Try again.'); }
+      } finally {
+        frame.width = frame.height = 0; capturing = false;
+        if (!closed) q('snap').disabled = false;
+      }
     }
   });
 }

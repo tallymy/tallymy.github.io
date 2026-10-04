@@ -49,7 +49,7 @@ async function seed() {
 async function harness(readReceipt = async () => ({ receipt: { items: [], total: 1000 }, ms: 10, tries: 1 })) {
   const S = { accounts: await db.all('accounts'), tx: await db.all('tx'), recurring: [], kv: { settings: {}, subRules: {}, rules: {} } };
   for (const row of await db.all('kv')) S.kv[row.key] = row.value;
-  const listeners = {}, timers = new Map(); let timerId = 0, id = 0;
+  const listeners = {}, timers = new Map(); let timerId = 0, id = 0, readerCancels = 0;
   const messages = [];
   const context = vm.createContext({
     db, S, Blob, Event, structuredClone, performance, URL: { createObjectURL: () => 'blob:old', revokeObjectURL() {} },
@@ -61,7 +61,7 @@ async function harness(readReceipt = async () => ({ receipt: { items: [], total:
     load: async () => { S.accounts = await db.all('accounts'); S.tx = await db.all('tx'); S.kv = { settings: {}, rules: {}, subRules: {} }; for (const row of await db.all('kv')) S.kv[row.key] = row.value; },
     typedShift: () => ({}), stamp: row => ({ ...row, updatedAt: 1 }), isFx: () => false,
     t: (text, ...values) => text.replace(/\{(\d+)\}/g, (_, n) => values[n]), fmtRM: n => `RM ${n / 100}`, fmtAcct: (a, n) => `RM ${n / 100}`, fmtDate: x => x, fmtMonth: x => x,
-    ocrSaved: async () => true, ocrProgress() {}, ocrReady: () => true, loadOcr: async () => {}, readReceipt, readPct: () => 0, OCR_BYTES: 0,
+    cancelOcr: () => { readerCancels++; }, ocrSaved: async () => true, ocrProgress() {}, ocrReady: () => true, loadOcr: async () => {}, readReceipt, readPct: () => 0, OCR_BYTES: 0,
     announce() {}, render() {}, go() {}, scanned() {}, toast: message => messages.push(message), startScan() {},
     deletePhotos: ids => db.delMany('receipts', ids), getPhoto: async id => (await db.get('receipts', id))?.blob,
     today: () => '2026-10-03', nowTime: () => '10:00', defaultAccount: () => S.accounts[0]?.id,
@@ -70,11 +70,12 @@ async function harness(readReceipt = async () => ({ receipt: { items: [], total:
     $: () => null, $$: () => [], confirmSheet: async () => true, validCorners: () => true, closeSheet() {},
   });
   vm.runInContext(`${functions}\n${reviewSource}\nvar inspectReview = () => ({current, queued:queue.length, reading}); var startPump = pump; var reviewBusy = busy; var viewAct = act;`, context);
-  return { context, S, timers, messages };
+  return { context, S, timers, messages, get readerCancels() { return readerCancels; } };
 }
 test('Replace clears transient KV and live review state, including on reload', async () => {
   await seed(); const h = await harness(); h.context.editExisting(old, { base: old });
   await h.context.replaceAll(incoming);
+  assert.equal(h.readerCancels, 1, 'replacing a book stops its active reader');
   for (const key of ['reviewDraft', 'scanQueue', 'jointGone', 'deskPlace']) assert.equal(await db.getKv(key), null);
   assert.equal(h.context.inspectReview().current, null); assert.equal(h.context.reviewBusy(), false); assert.equal(h.timers.size, 0);
   const reload = await harness(); assert.equal(await reload.context.restoreDraft(), false);

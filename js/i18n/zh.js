@@ -1,5 +1,13 @@
 // 简体中文. Keys are the English text in the code; {0} {1} are filled in by t().
 export default {
+"1 photo": "1 张照片",
+"The receipt reader could not start. Close Tally and try again.": "收据读取器无法启动。请关闭 Tally 后重试。",
+"{0} photos": "{0} 张照片",
+"Photo added": "照片已添加",
+"Could not take this photo. Try again.": "无法拍摄这张照片。请重试。",
+"Cancel this photo": "取消这张照片",
+"Cancel all": "全部取消",
+"Read the {0} waiting photos": "读取 {0} 张待处理照片",
 "Preparing the backup…": "正在准备备份…",
 "Collecting receipt photos… {0} of {1}": "正在收集收据照片… {0}/{1}",
 "Creating the backup ZIP…": "正在创建备份 ZIP…",

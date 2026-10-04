@@ -1,6 +1,14 @@
 // 繁體中文 (Traditional Chinese). First made from zh.js by tests/fixtures/make-hant.mjs, since then reviewed and edited by hand:
 // edit this file directly (running make-hant again would undo the review).
 export default {
+"1 photo": "1 張照片",
+"The receipt reader could not start. Close Tally and try again.": "收據讀取器無法啟動。請關閉 Tally 後重試。",
+"{0} photos": "{0} 張照片",
+"Photo added": "照片已加入",
+"Could not take this photo. Try again.": "無法拍攝這張照片。請重試。",
+"Cancel this photo": "取消這張照片",
+"Cancel all": "全部取消",
+"Read the {0} waiting photos": "讀取 {0} 張待處理照片",
 "Preparing the backup…": "正在準備備份…",
 "Collecting receipt photos… {0} of {1}": "正在收集收據照片… {0}/{1}",
 "Creating the backup ZIP…": "正在建立備份 ZIP…",

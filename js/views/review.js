@@ -7,17 +7,20 @@ import { firstWord } from './learn.js';
 import { subFor, learnSub, subsOf, fmtRM, fmtAcct, isFx, calcAmount, categorize, shopCategory, findDuplicate, validIso, addDays, addMonths, daysInMonth, itemKey, learnNames, owing } from '../engine.js';
 import { checksum, parseItemLines } from '../parse.js';
 import { on } from '../features.js';
-import { readReceipt, loadOcr, ocrReady, ocrProgress, ocrSaved, OCR_BYTES, readPct } from '../scan.js';
+import { readReceipt, loadOcr, ocrReady, ocrProgress, ocrSaved, OCR_BYTES, readPct, cancelOcr } from '../scan.js';
 let saved = false; ocrSaved().then(v => { saved = v; }, () => {});   // already on this phone: starting it is not a download
 import { render, go, scanned } from '../app.js';
 import { accName } from './money.js';
 import { startScan } from '../camera.js';
 import { validCorners } from '../receipt-image.js';
+import { isNative } from '../native.js';
+import * as db from '../db.js';
 
 // The first download's progress, drawn in place so the bar moves without redrawing the screen.
 let dlPct = 0, dlText = '', dlSaid = 0;
 const mb = n => (n / 1048576).toFixed(1);
 ocrProgress((got, total) => {
+  if (isNative || current?.status !== 'reading') return;
   dlPct = Math.round(got / total * 100); dlText = t('{0} of {1} MB', mb(got), mb(total));
   if (dlPct >= dlSaid + 25) { dlSaid = dlPct - dlPct % 25; announce(`${t('Downloading the receipt reader')}: ${dlSaid}%`); }   // every quarter, for screen readers
   const bar = document.getElementById('ocr-prog'), txt = document.getElementById('ocr-pct');
@@ -45,11 +48,15 @@ function onStage(stage) {
 const queue = [];     // files waiting to be read
 let current = null;   // {id, file?, status: 'reading'|'ready'|'error', draft, photo, ms, error}
 let reading = false;
+let rereadPrevious = null;
 let reviewEpoch = 0;
 let revealCleanup = null;
 const active = (epoch, generation) => epoch === reviewEpoch && generation === bookGeneration();
 export function resetReview() {
-  reviewEpoch++;
+  cancelOcr(); reviewEpoch++;
+  rereadPrevious = null;
+  if (current?.ticket) current.ticket.cancelled = true;
+  for (const item of queue) if (item.ticket) item.ticket.cancelled = true;
   clearTimeout(persistT); clearInterval(ticker);
   revealCleanup?.(); revealCleanup = null;
   if (current?.thumb) URL.revokeObjectURL(current.thumb);
@@ -58,16 +65,76 @@ export function resetReview() {
 document.addEventListener('tally:book-replaced', resetReview);
 
 // The photo being read stays listed until its draft is saved: closing the app mid-read must not lose it.
-const saveQueue = () => setKv('scanQueue', [...(['reading', 'error'].includes(current?.status) ? [current.id] : []), ...queue.map(q => q.id)]);
+const cancelled = () => Object.assign(new Error('Reading cancelled'), { name: 'AbortError', cancelled: true });
+const generationGuard = generation => ({ kv: [{ id: 'bookGeneration', value: generation == null ? undefined : { key: 'bookGeneration', value: generation } }] });
+async function reviewKv(key, value, epoch = reviewEpoch, generation = bookGeneration()) {
+  if (!active(epoch, generation)) throw cancelled();
+  await db.writeAtomic({ put: { kv: [{ key, value }] }, expected: generationGuard(generation),
+    beforeWrite: () => { if (!active(epoch, generation)) throw cancelled(); } });
+  if (active(epoch, generation)) S.kv[key] = value;
+}
+// Only queue/draft copies owned by this review; a stored entry always wins over cleanup.
+async function dropReviewPhotos(ids, generation) {
+  if (generation !== bookGeneration() || !ids.length) return;
+  try {
+    const rows = await db.all('tx');
+    if (generation !== bookGeneration()) return;
+    const referenced = new Set([...rows, ...S.tx].map(x => x.receiptId));
+    if (current?.draft?.receiptId) referenced.add(current.draft.receiptId);
+    if (rereadPrevious?.draft?.receiptId) referenced.add(rereadPrevious.draft.receiptId);
+    const own = [...new Set(ids)].filter(id => id && !referenced.has(id));
+    if (!own.length) return;
+    await db.writeAtomic({ del: { receipts: own }, expected: { ...generationGuard(generation), tx: rows.map(value => ({ id: value.id, value })) }, expectedKeys: { tx: rows.map(x => x.id) },
+      beforeWrite: () => { if (generation !== bookGeneration() || S.tx.some(x => own.includes(x.receiptId)) || own.includes(current?.draft?.receiptId) || own.includes(rereadPrevious?.draft?.receiptId)) throw cancelled(); } });
+  } catch {} // A changed book or a newly referenced photo is left intact.
+}
+const queueIds = () => [...(['reading', 'error'].includes(current?.status) && !rereadPrevious ? [current.id] : []), ...queue.map(q => q.id)];
+const saveQueue = (epoch = reviewEpoch, generation = bookGeneration(), ids = queueIds()) => reviewKv('scanQueue', ids, epoch, generation);
 export async function enqueue(files) {
-  const epoch = reviewEpoch, generation = bookGeneration();
+  const generation = bookGeneration();
+  // Register the entire selection before storage can yield. Cancelling one must
+  // not discard later files which have not reached their persistence turn yet.
+  const batch = [...files].map(file => ({ id: uid('r'), file, status: 'waiting', ticket: { cancelled: false } }));
+  queue.push(...batch);
+  const owned = item => !item.ticket.cancelled && generation === bookGeneration() && (queue.includes(item) || current?.ticket === item.ticket);
   try {
     let unsaved = 0;
-    for (const f of files) { if (!active(epoch, generation)) return; const id = uid('r'); queue.push({ id, file: f, status: 'waiting' }); if (!(await savePhoto(`q_${id}`, f, { generation }))) unsaved++; }
-    if (!active(epoch, generation)) return;
+    for (const item of batch) {
+      if (!owned(item)) continue;
+      if (current?.ticket === item.ticket && current.status === 'ready') continue;
+      const stored = await savePhoto(`q_${item.id}`, item.file, { generation });
+      if (!owned(item) || current?.ticket === item.ticket && current.status === 'ready') { await dropReviewPhotos([`q_${item.id}`], generation); continue; }
+      if (!stored) unsaved++;
+    }
+    if (!batch.some(owned)) return;
     if (unsaved) toast(t('Phone storage is full: close Tally now and these photos are lost. Free some space.'), { k: 'bad' });
-    await saveQueue();
-  } finally { if (active(epoch, generation)) pump(); }   // read them now whatever happened to the saved copies
+    await saveQueue(reviewEpoch, generation);
+  } catch (e) { if (!e?.cancelled && generation === bookGeneration() && batch.some(owned)) throw e; }
+  finally { if (generation === bookGeneration() && batch.some(owned)) pump(); }
+}
+/** Cancel reader work, never a stored entry or the gallery original. */
+export async function cancelReading(all = false) {
+  if (!reading && !['reading', 'waiting'].includes(current?.status) && (current || !queue.length)) return;
+  const generation = bookGeneration(), previous = rereadPrevious, abandoned = current || queue.shift();
+  cancelOcr(); const epoch = ++reviewEpoch;
+  clearTimeout(persistT); clearInterval(ticker); revealCleanup?.(); revealCleanup = null;
+  const discard = [!previous && abandoned?.id ? `q_${abandoned.id}` : null];
+  if (!previous && abandoned?.ticket) abandoned.ticket.cancelled = true;
+  if (all) { for (const item of queue) if (item.ticket) item.ticket.cancelled = true; discard.push(...queue.map(x => `q_${x.id}`)); queue.length = 0; }
+  for (const item of queue) { delete item.ahead; delete item.t0; delete item.stage; }
+  if (!previous && abandoned?.thumb) URL.revokeObjectURL(abandoned.thumb);
+  current = previous ? { ...previous, status: 'ready' } : null;
+  rereadPrevious = null; reading = false;
+  if (!previous && abandoned?.draft?.receiptId && !abandoned.existing) discard.push(abandoned.draft.receiptId);
+  refresh();
+  try {
+    await reviewKv('reviewDraft', previous ? { draft: previous.draft, existing: !!previous.existing, manual: !!previous.manual, base: previous.base } : null, epoch, generation);
+    await saveQueue(epoch, generation);
+    await dropReviewPhotos(discard.filter(Boolean), generation);
+  } catch (e) { if (!e?.cancelled && active(epoch, generation)) toast(t('Phone storage is full: close Tally now and these photos are lost. Free some space.'), { k: 'bad' }); }
+  if (!active(epoch, generation)) return;
+  if (current) { refresh(); if (!all) readAhead(); }
+  else if (queue.length) pump(); else { announce(t('Cancel all')); go('home'); }
 }
 // While one receipt is checked, the next photo is already being read, so a pile of receipts goes one after another.
 function readAhead() {
@@ -96,23 +163,29 @@ async function pump() {
     if (!active(epoch, generation)) return;
     est = ms / tries;
     const draft = toDraft(receipt);
-    if (photo) { draft.receiptId = uid('p'); if (!(await savePhoto(draft.receiptId, photo, { generation }))) delete draft.receiptId; }   // saved now so a draft survives a restart
-    if (!active(epoch, generation)) return;
+    let createdPhoto;
+    if (photo) { createdPhoto = draft.receiptId = uid('p'); if (!(await savePhoto(draft.receiptId, photo, { generation }))) delete draft.receiptId; }
+    if (!active(epoch, generation)) { if (createdPhoto) await dropReviewPhotos([createdPhoto], generation); return; }
+    try {
+      await reviewKv('reviewDraft', { draft, existing: false }, epoch, generation);
+      await saveQueue(epoch, generation, queue.map(x => x.id));
+    } catch (error) { if (createdPhoto) await dropReviewPhotos([createdPhoto], generation); throw error; }
+    if (!active(epoch, generation)) { if (createdPhoto) await dropReviewPhotos([createdPhoto], generation); return; }
+    if (current?.thumb && photo) URL.revokeObjectURL(current.thumb);
     current = { ...current, status: 'ready', ms, turns, draft, reveal: true, ...(photo ? { thumb: URL.createObjectURL(photo) } : {}) };   // the upright photo, as it was read
     if (!document.querySelector('.view-review')) toast(t('Your receipt is read.'), { k: 'good', icon: 'check', undo: () => go('review'), undoLabel: t('Check it') });   // left while the reader downloaded
     const n = draft.items.length;
     announce([n === 1 ? t('1 item') : t('{0} items', n), draft.total != null && t('Total {0}', fmtRM(draft.total))].filter(Boolean).join(', '));
-    await setKv('reviewDraft', { draft, existing: false });
-    if (!active(epoch, generation)) return;
-    await saveQueue();
+
   } catch (e) {
-    if (!active(epoch, generation)) return;
+    if (!active(epoch, generation) || e?.cancelled || e?.name === 'AbortError') return;
     console.error(e);
-    current = { ...current, status: 'error', error: /not an image/.test(e.message) ? t('That file is not a photo. Pick a JPG or PNG of the receipt.') : /too big/.test(e.message) ? t('That photo is over 40 MB. Take a new one or send a smaller copy.') : /too many pixels/.test(e.message) ? t('That photo is over 50 megapixels. Take it in the normal camera mode, or send a smaller copy.') : /could not be downloaded|fetch|network|load failed/i.test(e.message) ? t("The receipt reader isn't on this phone yet. It downloads once (about 30 MB, from Tally's own site); after that, scanning works offline. Connect and try again.") : t('Could not read this photo: {0}', e.message) };
+    current = { ...current, status: 'error', error: /not an image/.test(e.message) ? t('That file is not a photo. Pick a JPG or PNG of the receipt.') : /too big/.test(e.message) ? t('That photo is over 40 MB. Take a new one or send a smaller copy.') : /too many pixels/.test(e.message) ? t('That photo is over 50 megapixels. Take it in the normal camera mode, or send a smaller copy.') : /could not be downloaded|fetch|network|load failed/i.test(e.message) ? (isNative ? t('The receipt reader could not start. Close Tally and try again.') : t("The receipt reader isn't on this phone yet. It downloads once (about 30 MB, from Tally's own site); after that, scanning works offline. Connect and try again.")) : t('Could not read this photo: {0}', e.message) };
   }
   if (!active(epoch, generation)) return;
-  if (current?.status === 'error') await saveQueue();
-  else deletePhotos([`q_${next.id}`]);   // read: the draft holds its own copy now; an unreadable one waits for Skip
+  if (current?.status === 'error') await saveQueue(epoch, generation);
+  else await dropReviewPhotos([`q_${next.id}`], generation);   // read: the draft holds its own copy now; an unreadable one waits for Skip
+  if (!active(epoch, generation)) return;
   reading = false; refresh();
   if (current?.status === 'ready') readAhead();
 }
@@ -127,11 +200,11 @@ function persist() {
   clearTimeout(persistT);
   persistT = setTimeout(() => {
     if (!active(epoch, generation) || current?.status !== 'ready') return;
-    if (current.manual && !current.draft.items.length) return setKv('reviewDraft', null).catch(() => {});   // nothing typed yet: nothing to resume
-    setKv('reviewDraft', { draft: current.draft, existing: !!current.existing, manual: !!current.manual, base: current.base }).catch(() => {});
+    if (current.manual && !current.draft.items.length) return reviewKv('reviewDraft', null, epoch, generation).catch(() => {});   // nothing typed yet: nothing to resume
+    reviewKv('reviewDraft', { draft: current.draft, existing: !!current.existing, manual: !!current.manual, base: current.base }, epoch, generation).catch(() => {});
   }, 300);
 }
-function finish() { clearTimeout(persistT); if (current) current.unread = ''; if (current?.thumb) URL.revokeObjectURL(current.thumb); current = null; return setKv('reviewDraft', null); }
+function finish() { clearTimeout(persistT); if (current) current.unread = ''; if (current?.thumb) URL.revokeObjectURL(current.thumb); current = null; return reviewKv('reviewDraft', null); }
 /** On start: reopen an unfinished review. Returns 'items' for typed items (no photo), 'receipt' for the rest, or false. */
 export async function restoreDraft() {
   const epoch = reviewEpoch, generation = bookGeneration();
@@ -231,14 +304,16 @@ export const reviewView = {
     const waiting = queue.length;
     if (!current) return `<header class="top"><h1>${esc(t('Scan a receipt'))}</h1></header>
       <section class="card center">${ICON.camera}<p>${esc(t('Take a photo of a receipt, or pick one or more from your gallery. They are read on this phone and never uploaded.'))}</p>
-      ${queue.length ? `<button class="btn wide" data-act="rv-readq">${esc(t('Read the {0} waiting (downloads the reader, about 30 MB)', queue.length))}</button>` : ''}
+      ${queue.length ? `<button class="btn wide" data-act="rv-readq">${esc(t(isNative ? 'Read the {0} waiting photos' : 'Read the {0} waiting (downloads the reader, about 30 MB)', queue.length))}</button>` : ''}
+      ${queue.length ? `<div class="read-cancel"><button class="btn ghost" data-act="rv-cancel-one">${esc(t('Cancel this photo'))}</button><button class="btn ghost" data-act="rv-cancel-all">${esc(t('Cancel all'))}</button></div>` : ''}
       <button class="btn${queue.length ? ' ghost' : ''} wide" data-act="scan">${esc(t('Take or pick photos'))}</button><button class="btn ghost wide" data-act="tx-new">${esc(t('No receipt? Add by hand'))}</button>
       <button class="link" data-act="photo-tips">${ICON.camera}${esc(t('Tips for a clear photo'))}</button></section>`;
     if (current.status === 'reading' || current.status === 'waiting') return `<header class="top"><h1>${esc(t('Reading…'))}</h1></header>
       <div class="scanning">${current.thumb ? `<div class="receipt-thumb"><img src="${current.thumb}" alt=""><div class="scanline" aria-hidden="true"></div></div>` : ''}</div>
       <section class="card center" aria-busy="true">${current.t0 ? `<p id="read-stage">${esc(STAGES[stageNow()]())}</p><div class="dl"><progress id="read-prog" max="100" value="${readPct(performance.now() - current.t0, current.est)}" aria-label="${esc(t('Reading…'))}"></progress></div>`
-        : `<p>${esc(ocrReady() || saved ? t('Starting the reader…') : t('Getting the reader ready (the first time downloads about 30 MB; after that it works offline).'))}</p>`}
-      ${ocrReady() || saved ? '' : `<button class="btn ghost wide" data-act="go" data-to="home">${esc(t('Use Tally while it downloads'))}</button><div class="dl"><progress id="ocr-prog" max="100" value="${dlPct}" aria-label="${esc(t('Downloading the receipt reader'))}"></progress><span id="ocr-pct" class="fine num">${esc(dlText)}</span></div>`}
+        : `<p>${esc(isNative || ocrReady() || saved ? t('Starting the reader…') : t('Getting the reader ready (the first time downloads about 30 MB; after that it works offline).'))}</p>`}
+      ${isNative || ocrReady() || saved ? '' : `<button class="btn ghost wide" data-act="go" data-to="home">${esc(t('Use Tally while it downloads'))}</button><div class="dl"><progress id="ocr-prog" max="100" value="${dlPct}" aria-label="${esc(t('Downloading the receipt reader'))}"></progress><span id="ocr-pct" class="fine num">${esc(dlText)}</span></div>`}
+      <div class="read-cancel"><button class="btn ghost" data-act="rv-cancel-one">${esc(t('Cancel this photo'))}</button><button class="btn ghost" data-act="rv-cancel-all">${esc(t('Cancel all'))}</button></div>
       ${waiting ? `<p class="fine">${esc(t('{0} more waiting', waiting))}</p>` : ''}<button class="link" data-act="photo-tips">${ICON.camera}${esc(t('Tips for a clear photo'))}</button></section>`;
     if (current.status === 'error') return `<header class="top"><h1>${esc(t('Scan a receipt'))}</h1></header>
       <section class="card"><p class="err">${esc(current.error)}</p><button class="btn wide" data-act="rv-retry">${esc(t('Try again'))}</button><div class="row2"><button class="btn ghost" data-act="rv-skip">${esc(waiting ? t('Next receipt') : t('Close'))}</button><button class="btn" data-act="scan">${esc(t('Try another photo'))}</button></div></section>`;
@@ -312,12 +387,12 @@ async function fixCorners() {
   const epoch = reviewEpoch, generation = bookGeneration();
   const receipt = current; if (!receipt?.thumb || receipt.existing || reading) return;
   if (!(await confirmSheet({ title: t('Fix the receipt corners'), body: t('Reading again replaces changes you made to this receipt.'), ok: t('Continue') }))) return;
-  if (!active(epoch, generation)) return;
+  if (!active(epoch, generation) || current !== receipt) return;
   const file = receipt.file || await getPhoto(receipt.draft.receiptId); if (!file) return;
-  if (!active(epoch, generation)) return;
+  if (!active(epoch, generation) || current !== receipt) return;
   const url = URL.createObjectURL(file), image = new Image(); image.src = url;
   try { await image.decode(); } finally { URL.revokeObjectURL(url); }
-  if (!active(epoch, generation)) return;
+  if (!active(epoch, generation) || current !== receipt) return;
   const canvas = document.createElement('canvas'), scale = Math.min(1, 900 / Math.max(image.naturalWidth, image.naturalHeight));
   canvas.width = Math.round(image.naturalWidth * scale); canvas.height = Math.round(image.naturalHeight * scale);
   canvas.style.cssText = 'width:100%;height:auto;touch-action:manipulation'; canvas.tabIndex = 0;
@@ -342,19 +417,29 @@ async function fixCorners() {
     const action = e.target.closest('[data-corner]')?.dataset.corner;
     if (action === 'reset') { points = []; cursor = [0, 0]; sheet.querySelector('#corner-error').textContent = ''; paint(); }
     if (action !== 'read' || !validCorners(points) || current !== receipt) return;
-    const corners = points; closeSheet(); reading = true; current.status = 'reading'; refresh();
+    const corners = points; closeSheet();
+    cancelOcr(); for (const item of queue) { delete item.ahead; delete item.t0; delete item.stage; }
+    rereadPrevious = { ...receipt, status: 'ready' };
+    reading = true; current = { ...receipt, status: 'reading' }; refresh();
+    let createdPhoto;
     try {
       const result = await readReceipt(file, s => { if (active(epoch, generation)) onStage(s); }, { corners });
       if (!active(epoch, generation)) return;
       const draft = toDraft(result.receipt); draft.accountId = receipt.draft.accountId;
       const oldPhoto = receipt.draft.receiptId;
-      draft.receiptId = uid('p');
+      createdPhoto = draft.receiptId = uid('p');
       if (!(await savePhoto(draft.receiptId, result.photo, { generation }))) {
         if (oldPhoto) draft.receiptId = oldPhoto; else delete draft.receiptId;
-      } else if (oldPhoto && active(epoch, generation)) await deletePhotos([oldPhoto]);
-      if (!active(epoch, generation)) return;
-      URL.revokeObjectURL(receipt.thumb); current = { ...receipt, status: 'ready', draft, thumb: URL.createObjectURL(result.photo) }; await setKv('reviewDraft', { draft, existing: false });
-    } catch (error) { if (active(epoch, generation)) { current.status = 'ready'; toast(t('Could not read this photo: {0}', error.message), { k: 'bad' }); } }
+      }
+      if (!active(epoch, generation)) { await dropReviewPhotos([createdPhoto], generation); return; }
+      await reviewKv('reviewDraft', { draft, existing: false }, epoch, generation);
+      if (!active(epoch, generation)) { await dropReviewPhotos([createdPhoto], generation); return; }
+      URL.revokeObjectURL(receipt.thumb); current = { ...receipt, status: 'ready', draft, thumb: URL.createObjectURL(result.photo) }; rereadPrevious = null;
+      if (oldPhoto && oldPhoto !== draft.receiptId) await dropReviewPhotos([oldPhoto], generation);
+    } catch (error) {
+      if (active(epoch, generation)) { current = rereadPrevious || receipt; rereadPrevious = null; if (!error?.cancelled && error?.name !== 'AbortError') toast(t('Could not read this photo: {0}', error.message), { k: 'bad' }); }
+      if (createdPhoto) await dropReviewPhotos([createdPhoto], generation);
+    }
     finally { if (active(epoch, generation)) { reading = false; refresh(); } }
   });
   paint();
@@ -472,6 +557,8 @@ function addLines(text) {
   return { n: lines.length, skipped };
 }
 export const act = {
+  'rv-cancel-one': () => cancelReading(false),
+  'rv-cancel-all': () => cancelReading(true),
   'rv-flatten': fixCorners,
   'rv-readq': () => { pump(); render(); },
   'photo-tips': () => photoTips(),

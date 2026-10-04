@@ -1,5 +1,13 @@
 // 日本語 (Japanese). Keys are the English text in the code (t('...')); tests/i18n.test.mjs fails if one is missing.
 export default {
+"1 photo": "写真 1 枚",
+"The receipt reader could not start. Close Tally and try again.": "レシートリーダーを起動できませんでした。Tally を閉じて、もう一度お試しください。",
+"{0} photos": "写真 {0} 枚",
+"Photo added": "写真を追加しました",
+"Could not take this photo. Try again.": "写真を撮れませんでした。もう一度お試しください。",
+"Cancel this photo": "この写真をキャンセル",
+"Cancel all": "すべてキャンセル",
+"Read the {0} waiting photos": "待機中の写真 {0} 枚を読み取る",
 "Preparing the backup…": "バックアップを準備しています…",
 "Collecting receipt photos… {0} of {1}": "レシート写真を集めています… {0}/{1}",
 "Creating the backup ZIP…": "バックアップ ZIP を作成しています…",

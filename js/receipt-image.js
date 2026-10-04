@@ -19,23 +19,44 @@ export function sections(w, h, side = 2000, overlap = 200) {
   const n = Math.ceil((long - side) / (side - overlap)) + 1;
   if (n > 12) throw Error('Too many receipt sections');
   return Array.from({ length: n }, (_, i) => {
-    const start = Math.round(i * (long - side) / (n - 1));
-    return vertical ? { x: 0, y: start, w, h: side } : { x: start, y: 0, w: side, h };
+    const start = i * (side - overlap), length = Math.min(side, long - start);
+    return vertical ? { x: 0, y: start, w, h: length } : { x: start, y: 0, w: length, h };
   });
 }
 const bounds = b => { const xs = b.box.map(p => p[0]), ys = b.box.map(p => p[1]); return { l: Math.min(...xs), r: Math.max(...xs), t: Math.min(...ys), b: Math.max(...ys) }; };
 // Deduplicate by position as well as text: two identical purchases on different rows are real items.
 export function mergeSections(groups) {
-  const out = [];
+  const out = [], origins = [];
   for (const { texts, area } of groups) for (const t of texts) {
     const box = t.box.map(([x, y]) => [x + area.x, y + area.y]);
     const item = { ...t, box }, a = bounds(item);
-    const index = out.findIndex(v => {
+    let index = out.findIndex(v => {
+      const b = bounds(v), intersection = Math.max(0, Math.min(a.r, b.r) - Math.max(a.l, b.l)) * Math.max(0, Math.min(a.b, b.b) - Math.max(a.t, b.t));
+      const smaller = Math.min((a.r-a.l)*(a.b-a.t), (b.r-b.l)*(b.b-b.t));
+      return smaller > 0 && intersection/smaller > 0.65 && (v.text.trim() === item.text.trim() || intersection/smaller > 0.9);
+    });
+    if (index < 0) {
+    const candidates = [];
+    out.forEach((v, n) => {
       const b = bounds(v), intersection = Math.max(0, Math.min(a.r, b.r) - Math.max(a.l, b.l)) * Math.max(0, Math.min(a.b, b.b) - Math.max(a.t, b.t));
       const smaller = Math.min((a.r - a.l) * (a.b - a.t), (b.r - b.l) * (b.b - b.t));
-      return smaller > 0 && intersection / smaller > 0.65 && (v.text.trim() === item.text.trim() || intersection / smaller > 0.9);
+      const strict = smaller > 0 && intersection / smaller > 0.65 && (v.text.trim() === item.text.trim() || intersection / smaller > 0.9);
+
+      // Separate crop reads can shift the same full line by about half its height.
+      // A weaker match is confined to the shared crop band and equal complete text.
+      const prior = origins[n];
+      if (prior === area || !/(?:^|\s)\d{1,6}[.,]\d{2}\s*$/u.test(String(item.text)) || String(v.text).replace(/\s/gu, '') !== String(item.text).replace(/\s/gu, '')) return false;
+      const l = Math.max(prior.x, area.x), r = Math.min(prior.x + prior.w, area.x + area.w);
+      const top = Math.max(prior.y, area.y), bottom = Math.min(prior.y + prior.h, area.y + area.h);
+      const acx = (a.l+a.r)/2, bcx = (b.l+b.r)/2, acy = (a.t+a.b)/2, bcy = (b.t+b.b)/2;
+      const shared = l < r && top < bottom && acx >= l && acx <= r && bcx >= l && bcx <= r && acy >= top && acy <= bottom && bcy >= top && bcy <= bottom;
+      const horizontal = Math.max(0, Math.min(a.r,b.r)-Math.max(a.l,b.l)) / Math.max(a.r-a.l,b.r-b.l);
+      const height = Math.min(a.b-a.t,b.b-b.t);
+      if (shared && smaller > 0 && intersection/smaller > 0.45 && horizontal > 0.95 && Math.abs(acy-bcy) < height*0.6) candidates.push(n);
     });
-    if (index < 0) out.push(item); else if ((item.mean || 0) > (out[index].mean || 0)) out[index] = item;
+    if (candidates.length === 1) index = candidates[0];
+    }
+    if (index < 0) { out.push(item); origins.push(area); } else if ((item.mean || 0) > (out[index].mean || 0)) { out[index] = item; origins[index] = area; }
   }
   return out;
 }

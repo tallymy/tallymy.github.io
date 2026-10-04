@@ -410,8 +410,16 @@ export function dateOrder(rows, col, mdy = false) {
 const pad2 = n => String(n).padStart(2, '0');
 /** "12:40" in a cell, the fraction of an Excel date-time serial, or (bare) a Time column's "930" / "1845" (AndroMoney). */
 const timeOf = (v, bare = false) => {
-  const s = cleanText(v, 40), m = s.match(/\b([01]?\d|2[0-3]):([0-5]\d)\b/);
-  if (m) return `${m[1].padStart(2, '0')}:${m[2]}`;
+  const s = cleanText(v, 40), m = s.match(/\b(\d{1,2}):(\d{2})(?::(\d{2})(?:\.\d{1,9})?)?(?:\s*([ap]\.?m\.?))?(?![\w:.]|\s*[ap]\.?m)/i);
+  if (m) {
+    let hour = +m[1];
+    if (+m[2] > 59 || (m[3] != null && +m[3] > 59)) return null;
+    if (m[4]) {
+      if (hour < 1 || hour > 12) return null;
+      hour = hour % 12 + (/^p/i.test(m[4]) ? 12 : 0);
+    } else if (hour > 23) return null;
+    return `${pad2(hour)}:${m[2]}`;
+  }
   if (/^\d{5}\.\d+$/.test(s)) { const min = Math.round((+s % 1) * 1440) % 1440; return min ? `${pad2(Math.floor(min / 60))}:${pad2(min % 60)}` : null; }
   return bare && /^\d{3,4}$/.test(s) && +s.slice(0, -2) < 24 && +s.slice(-2) < 60 ? `${pad2(s.slice(0, -2))}:${s.slice(-2)}` : null;
 };
