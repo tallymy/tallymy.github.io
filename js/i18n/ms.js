@@ -2050,5 +2050,17 @@ export default {
 "ExpenseIQ foreign currencies are not supported. Choose a MYR-only backup. Nothing was imported.": "Mata wang asing ExpenseIQ tidak disokong. Pilih sandaran MYR sahaja. Tiada apa-apa diimport.",
 "ExpenseIQ split, repeating and project entries are not supported. Nothing was imported.": "Transaksi bil kongsi, berulang dan projek ExpenseIQ tidak disokong. Tiada apa-apa diimport.",
 "This ExpenseIQ version or financial layout is not supported. Choose a V3 backup of ordinary MYR entries. Nothing was imported.": "Versi atau bentuk kewangan ExpenseIQ ini tidak disokong. Pilih sandaran V3 dengan transaksi MYR biasa. Tiada apa-apa diimport.",
-"This ExpenseIQ backup has invalid data or unsupported financial forms. Keep the original file and check the supported limits. Nothing was imported.": "Sandaran ExpenseIQ ini mempunyai data tidak sah atau bentuk kewangan yang tidak disokong. Simpan fail asal dan semak had sokongan. Tiada apa-apa diimport."
+"This ExpenseIQ backup has invalid data or unsupported financial forms. Keep the original file and check the supported limits. Nothing was imported.": "Sandaran ExpenseIQ ini mempunyai data tidak sah atau bentuk kewangan yang tidak disokong. Simpan fail asal dan semak had sokongan. Tiada apa-apa diimport.",
+  "Choose an account": "Pilih akaun",
+  "Create a savings account": "Buat akaun simpanan",
+  "No account is picked, so the goal stays at RM 0. Pick the account the money sits in.": "Tiada akaun dipilih, jadi matlamat kekal RM 0. Pilih akaun tempat wang disimpan.",
+  "Pick an account": "Pilih akaun",
+  "Progress is this account's balance. Money you put into it fills the bar.": "Kemajuan ialah baki akaun ini. Wang yang anda masukkan akan memenuhkan bar.",
+  "That account has nothing in it yet, so the goal starts at RM 0. It fills as money goes in.": "Akaun itu masih kosong, jadi matlamat bermula pada RM 0. Ia terisi apabila wang masuk.",
+  "This will show RM 0 until money is in the account": "Ini akan menunjukkan RM 0 sehingga ada wang dalam akaun",
+  "The camera is used only when you tap Scan, and photos stay on this phone. A computer connection opens a short-lived link on your own Wi-Fi only while you turn it on. Notifications are used only for reminders you turn on.": "Kamera hanya digunakan apabila anda ketik Imbas, dan gambar kekal dalam telefon ini. Sambungan komputer membuka pautan sementara pada Wi-Fi anda sendiri hanya semasa anda menghidupkannya. Pemberitahuan hanya digunakan untuk peringatan yang anda hidupkan.",
+  "The full privacy policy is in English.": "Dasar privasi penuh hanya dalam bahasa Inggeris.",
+  "Savings goals are easier: choose where the money sits, or create a savings account right there, and tap a goal on Home to edit it": "Matlamat simpanan lebih mudah: pilih tempat wang disimpan, atau cipta akaun simpanan di situ juga, dan ketik matlamat di Utama untuk mengeditnya",
+  "The camera button stays in the middle when you turn features off, and the features list stays open while you switch them": "Butang kamera kekal di tengah apabila anda mematikan ciri, dan senarai ciri kekal terbuka semasa anda menukarnya",
+  "Privacy pages now explain the camera and connecting to your computer": "Halaman privasi kini menerangkan tentang kamera dan sambungan ke komputer anda",
 };

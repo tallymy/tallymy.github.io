@@ -20,7 +20,7 @@ window.addEventListener('tally:scan-shortcut', () => {
 
 applySavedLook();   // theme and accent before anything is drawn (the database copy is applied on every render)
 
-export const APP_VERSION = '1.13.9';
+export const APP_VERSION = '1.13.10';
 export const MAKER = 'fir1412', CONTACT = 'fir1412dev@gmail.com';   // the developer, and the data user for feedback (privacy pages)
 // Checking a receipt and Settings (with Welcome and imports) load the first time they are needed, not before Home
 // shows. sw.js still caches them for offline use.
@@ -84,7 +84,8 @@ export function render() {
   applyLook(settings());
   const tabs = [['home', ICON.home, t('Home')], ['activity', ICON.list, t('Activity')], on('insights') && ['insights', ICON.chart, t('Insights')], (on('budgets') || on('bills')) && ['budgets', ICON.wallet, t(on('budgets') ? 'Budgets' : 'Bills')]].filter(Boolean);
   tabs.splice(Math.ceil(tabs.length / 2), 0, null);   // the camera (or +) in the middle, however many tabs are on
-  const nav = r === 'welcome' ? '' : `<nav class="tabs" aria-label="${esc(t('Main'))}"><span class="brand" aria-hidden="true">Tally</span>${tabs.map(x => x ? `<a href="#/${x[0]}" class="tab${r === x[0] ? ' on' : ''}"${r === x[0] ? ' aria-current="page"' : ''}>${x[1]}<span>${esc(x[2])}</span></a>`
+  if (tabs.length % 2 === 0) tabs.push(0);   // an odd number of tabs (3): an empty one on the short side keeps the camera at the centre
+  const nav = r === 'welcome' ? '' : `<nav class="tabs" aria-label="${esc(t('Main'))}"><span class="brand" aria-hidden="true">Tally</span>${tabs.map(x => x === 0 ? '<span class="tab pad" aria-hidden="true"></span>' : x ? `<a href="#/${x[0]}" class="tab${r === x[0] ? ' on' : ''}"${r === x[0] ? ' aria-current="page"' : ''}>${x[1]}<span>${esc(x[2])}</span></a>`
     : on('receipts') ? `<button class="fab" data-act="scan" aria-label="${esc(t('Scan a receipt'))}">${ICON.camera}</button>` : `<button class="fab" data-act="tx-new" aria-label="${esc(t('Add'))}">${ICON.plus}</button>`).join('')}<a href="#/settings" class="tab desk${r === 'settings' ? ' on' : ''}">${ICON.gear}<span>${esc(t('Settings'))}</span></a></nav>`;
   const app = $('#app'), active = document.activeElement, routeChanged = renderedRoute !== r;
   const focused = !sheetOpen() && app.contains(active) ? {

@@ -2049,5 +2049,17 @@ export default {
 "ExpenseIQ foreign currencies are not supported. Choose a MYR-only backup. Nothing was imported.": "ExpenseIQの外貨は未対応です。MYRのみのバックアップを選んでください。何も取り込んでいません。",
 "ExpenseIQ split, repeating and project entries are not supported. Nothing was imported.": "ExpenseIQの割り勘、繰り返し、プロジェクト取引は未対応です。何も取り込んでいません。",
 "This ExpenseIQ version or financial layout is not supported. Choose a V3 backup of ordinary MYR entries. Nothing was imported.": "このExpenseIQのバージョンまたは金融形式は未対応です。通常のMYR取引のV3バックアップを選んでください。何も取り込んでいません。",
-"This ExpenseIQ backup has invalid data or unsupported financial forms. Keep the original file and check the supported limits. Nothing was imported.": "無効なデータまたは未対応の金融形式が含まれています。元のファイルを保管し、対応範囲を確認してください。何も取り込んでいません。"
+"This ExpenseIQ backup has invalid data or unsupported financial forms. Keep the original file and check the supported limits. Nothing was imported.": "無効なデータまたは未対応の金融形式が含まれています。元のファイルを保管し、対応範囲を確認してください。何も取り込んでいません。",
+  "Choose an account": "口座を選ぶ",
+  "Create a savings account": "貯金用の口座を作る",
+  "No account is picked, so the goal stays at RM 0. Pick the account the money sits in.": "口座が選ばれていないため、目標は RM 0 のままです。お金を置く口座を選んでください。",
+  "Pick an account": "口座を選ぶ",
+  "Progress is this account's balance. Money you put into it fills the bar.": "進み具合はこの口座の残高です。お金を入れるとバーが進みます。",
+  "That account has nothing in it yet, so the goal starts at RM 0. It fills as money goes in.": "その口座にはまだお金がないため、目標は RM 0 から始まります。お金が入ると増えます。",
+  "This will show RM 0 until money is in the account": "口座にお金が入るまで、RM 0 と表示されます",
+  "The camera is used only when you tap Scan, and photos stay on this phone. A computer connection opens a short-lived link on your own Wi-Fi only while you turn it on. Notifications are used only for reminders you turn on.": "カメラは「スキャン」をタップしたときだけ使われ、写真はこのスマホの中にとどまります。パソコン接続は、あなたがオンにしている間だけ、自分の Wi-Fi 上に短時間の接続を開きます。通知は、オンにしたリマインダーにだけ使われます。",
+  "The full privacy policy is in English.": "プライバシーポリシー全文は英語版のみです。",
+  "Savings goals are easier: choose where the money sits, or create a savings account right there, and tap a goal on Home to edit it": "貯蓄目標がかんたんに：お金がある場所を選ぶか、その場で貯蓄口座を作れます。ホームで目標をタップすると編集できます",
+  "The camera button stays in the middle when you turn features off, and the features list stays open while you switch them": "機能をオフにしてもカメラボタンは中央のままで、機能の一覧は切り替えている間ずっと開いたままです",
+  "Privacy pages now explain the camera and connecting to your computer": "プライバシーのページに、カメラとパソコンへの接続についての説明を追加しました",
 };

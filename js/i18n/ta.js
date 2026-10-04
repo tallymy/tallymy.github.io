@@ -2049,5 +2049,17 @@ export default {
 "ExpenseIQ foreign currencies are not supported. Choose a MYR-only backup. Nothing was imported.": "ExpenseIQ வெளிநாட்டு நாணயங்கள் ஆதரிக்கப்படாது. MYR மட்டும் உள்ள காப்பைத் தேர்ந்தெடுக்கவும். எதுவும் இறக்குமதி செய்யப்படவில்லை.",
 "ExpenseIQ split, repeating and project entries are not supported. Nothing was imported.": "ExpenseIQ பகிர்வு, தொடர் மற்றும் திட்டப் பதிவுகள் ஆதரிக்கப்படாது. எதுவும் இறக்குமதி செய்யப்படவில்லை.",
 "This ExpenseIQ version or financial layout is not supported. Choose a V3 backup of ordinary MYR entries. Nothing was imported.": "இந்த ExpenseIQ பதிப்பு அல்லது நிதி அமைப்பு ஆதரிக்கப்படாது. வழக்கமான MYR பதிவுகளின் V3 காப்பைத் தேர்ந்தெடுக்கவும். எதுவும் இறக்குமதி செய்யப்படவில்லை.",
-"This ExpenseIQ backup has invalid data or unsupported financial forms. Keep the original file and check the supported limits. Nothing was imported.": "இந்த ExpenseIQ காப்பில் தவறான தரவு அல்லது ஆதரிக்கப்படாத நிதி வடிவங்கள் உள்ளன. அசல் கோப்பை வைத்திருந்து ஆதரவு வரம்புகளைச் சரிபார்க்கவும். எதுவும் இறக்குமதி செய்யப்படவில்லை."
+"This ExpenseIQ backup has invalid data or unsupported financial forms. Keep the original file and check the supported limits. Nothing was imported.": "இந்த ExpenseIQ காப்பில் தவறான தரவு அல்லது ஆதரிக்கப்படாத நிதி வடிவங்கள் உள்ளன. அசல் கோப்பை வைத்திருந்து ஆதரவு வரம்புகளைச் சரிபார்க்கவும். எதுவும் இறக்குமதி செய்யப்படவில்லை.",
+  "Choose an account": "கணக்கைத் தேர்ந்தெடுக்கவும்",
+  "Create a savings account": "சேமிப்புக் கணக்கு உருவாக்கு",
+  "No account is picked, so the goal stays at RM 0. Pick the account the money sits in.": "கணக்கு எதுவும் தேர்ந்தெடுக்கப்படவில்லை, அதனால் இலக்கு RM 0 ஆகவே இருக்கும். பணம் இருக்கும் கணக்கைத் தேர்ந்தெடுக்கவும்.",
+  "Pick an account": "கணக்கைத் தேர்ந்தெடு",
+  "Progress is this account's balance. Money you put into it fills the bar.": "முன்னேற்றம் என்பது இந்தக் கணக்கின் இருப்பு. இதில் பணம் போடப் போட பட்டை நிரம்பும்.",
+  "That account has nothing in it yet, so the goal starts at RM 0. It fills as money goes in.": "அந்தக் கணக்கில் இன்னும் பணம் இல்லை, அதனால் இலக்கு RM 0 இலிருந்து தொடங்கும். பணம் வந்தால் நிரம்பும்.",
+  "This will show RM 0 until money is in the account": "கணக்கில் பணம் வரும் வரை இது RM 0 எனக் காட்டும்",
+  "The camera is used only when you tap Scan, and photos stay on this phone. A computer connection opens a short-lived link on your own Wi-Fi only while you turn it on. Notifications are used only for reminders you turn on.": "கேமரா நீங்கள் ஸ்கேன் என்பதைத் தட்டும்போது மட்டுமே பயன்படுத்தப்படும்; படங்கள் இந்தத் தொலைபேசியிலேயே இருக்கும். கணினி இணைப்பை நீங்கள் இயக்கும்போது மட்டுமே, உங்கள் சொந்த Wi-Fi-யில் ஒரு குறுகிய கால இணைப்பு திறக்கப்படும். அறிவிப்புகள் நீங்கள் இயக்கிய நினைவூட்டல்களுக்கு மட்டுமே பயன்படுத்தப்படும்.",
+  "The full privacy policy is in English.": "முழுமையான தனியுரிமைக் கொள்கை ஆங்கிலத்தில் மட்டுமே உள்ளது.",
+  "Savings goals are easier: choose where the money sits, or create a savings account right there, and tap a goal on Home to edit it": "சேமிப்பு இலக்குகள் இன்னும் எளிது: பணம் எங்கே இருக்கிறது என்பதைத் தேர்வு செய்யலாம், அல்லது அங்கேயே சேமிப்புக் கணக்கை உருவாக்கலாம்; முகப்பில் இலக்கைத் தட்டி திருத்தலாம்",
+  "The camera button stays in the middle when you turn features off, and the features list stays open while you switch them": "அம்சங்களை அணைத்தாலும் கேமரா பொத்தான் நடுவிலேயே இருக்கும்; அம்சங்களை மாற்றும்போது பட்டியலும் திறந்தே இருக்கும்",
+  "Privacy pages now explain the camera and connecting to your computer": "தனியுரிமைப் பக்கங்கள் இப்போது கேமரா பற்றியும் உங்கள் கணினியுடன் இணைப்பது பற்றியும் விளக்குகின்றன",
 };

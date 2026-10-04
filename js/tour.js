@@ -7,6 +7,11 @@ import { isNative } from './native.js';
 
 // Newest first. Written for users; each line is translated.
 export const WHATS_NEW = {
+  '1.13.10': [
+    'Savings goals are easier: choose where the money sits, or create a savings account right there, and tap a goal on Home to edit it',
+    'The camera button stays in the middle when you turn features off, and the features list stays open while you switch them',
+    'Privacy pages now explain the camera and connecting to your computer',
+  ],
   '1.13.9': [
     "Import from ExpenseIQ backups, and Undo import now works even after you have used Tally for a moment",
   ],

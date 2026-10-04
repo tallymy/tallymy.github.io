@@ -43,14 +43,14 @@ const seg = (act, v, on, label, icon = '') => `<button class="seg${on ? ' on' : 
 const HOME_CARDS = () => [['gap', t('Missed days'), ICON.clock], ['nudge', t('Habit nudges'), ICON.clock], ['bills', t('Bills due'), ICON.bell], ['insight', t('Insights'), ICON.chart], ['learn', t('Learn Tally'), ICON.sparkles], ['stickers', t('Sticker book'), ICON.award]];
 /** Tally in modules: a preset (Simple · Standard · Everything) or each feature on its own. Off hides; nothing is deleted.
  *  Folded to one line (the mode now) until opened; it stays open while Settings redraws after each change. */
-let featOpen = false;
+let featOpen = false, featOne = false;   // featOne: the inner 'one by one' list, kept open the same way
 function featuresCard() {
   const now = presetNow(), preset = (id, label, sub) => `<button class="pal preset${now === id ? ' on' : ''}" data-act="set-preset" data-v="${id}" aria-pressed="${now === id}"><b>${esc(label)}</b><small>${esc(sub)}</small></button>`;
   const mode = { simple: t('Simple'), standard: t('Standard'), everything: t('Everything') }[now] || t('Custom');
   return `<details class="card acard" id="s-features"${featOpen ? ' open' : ''}><summary data-act="features-open"><span class="grow"><span class="lbl">${esc(t('Features'))}</span><b>${esc(mode)}</b></span><span class="chev" aria-hidden="true"></span></summary><p class="fine">${esc(t("Turn off what you don't use. Nothing is deleted: turn it back on and it is all there."))}</p>
     <div class="palettes" role="group" aria-label="${esc(t('Features'))}">${preset('simple', t('Simple'), t('Type it, see the list and totals'))}${preset('standard', t('Standard'), t('Receipts, budgets, insights'))}${preset('everything', t('Everything'), t('All of it, streaks too'))}</div>
     ${now === 'custom' ? `<p class="fine">${esc(t('Custom: your own mix.'))}</p>` : ''}
-    <details class="more-cats"><summary>${esc(t('Choose features one by one'))}</summary>${MODULES.map(([k, name, sub]) => `<label class="toggle"><span class="grow"><b>${esc(t(name))}</b><small>${esc(t(sub))}</small></span><input type="checkbox" class="switch" role="switch" data-input="module" data-k="${k}"${on(k) ? ' checked' : ''}></label>`).join('')}</details></details>`;
+    <details class="more-cats" id="s-features-one"${featOne ? ' open' : ''}><summary data-act="features-one">${esc(t('Choose features one by one'))}</summary>${MODULES.map(([k, name, sub]) => `<label class="toggle"><span class="grow"><b>${esc(t(name))}</b><small>${esc(t(sub))}</small></span><input type="checkbox" class="switch" role="switch" data-input="module" data-k="${k}"${on(k) ? ' checked' : ''}></label>`).join('')}</details></details>`;
 }
 function lookCard() {
   const s = settings(), theme = ['light', 'dark'].includes(s.theme) ? s.theme : 'system', acc = parseHex(s.accent) || baseAccent(), hide = s.homeHide || [];
@@ -184,7 +184,7 @@ export const welcomeView = {
   },
 };
 
-function accountSheet(a = {}) {
+function accountSheet(a = {}, stack = false) {
   const isNew = !a.id, now = isNew ? null : balances([a], S.tx, today()).by[a.id], cur = a.currency || 'MYR';
   openSheet(`<h2 class="sh-title">${esc(isNew ? t('Add an account') : t('Edit account'))}</h2>
     <label class="field"><span>${esc(t('Name'))}</span><input id="ac-name" maxlength="60" value="${esc(a.name || '')}" placeholder="${esc(t('e.g. Maybank, Cash, Touch \'n Go'))}"${isNew ? ' autofocus' : ''}></label>
@@ -196,7 +196,7 @@ function accountSheet(a = {}) {
     ${isNew ? '' : `<details class="more"><summary>${esc(t('More'))}</summary>`}<label class="field"><span>${esc(isFx(a) ? t('Balance when you started ({0})', cur) : t('Balance when you started (RM)'))}</span><input id="ac-open" inputmode="decimal" value="${a.opening != null ? (a.opening / 100).toFixed(2) : ''}" placeholder="0.00"><small>${esc(t('For a credit card, enter what you owe as a negative number, e.g. -350.'))}</small></label>${isNew ? '' : '</details>'}
     <label class="field"><span>${esc(t('Whose money'))}</span><select id="ac-scope"><option value="personal">${esc(t('Mine (personal)'))}</option>${on('joint') || a.scope === 'joint' ? `<option value="joint"${a.scope === 'joint' ? ' selected' : ''}>${esc(t('Joint (shared with my partner)'))}</option>` : ''}${on('business') || a.scope === 'business' ? `<option value="business"${a.scope === 'business' ? ' selected' : ''}>${esc(t('Business (my stall, rides, shop)'))}</option>` : ''}</select></label>
     <p class="err" id="ac-err" role="alert"></p>
-    <div class="row2">${isNew ? `<button class="btn ghost" data-act="sheet-close">${esc(t('Cancel'))}</button>` : `<button class="btn ghost danger" data-act="acc-del" data-id="${esc(a.id)}">${esc(t('Delete'))}</button>`}<button class="btn" data-act="acc-save" data-id="${esc(a.id || '')}">${esc(t('Save'))}</button></div>`, { label: t('Account') });
+    <div class="row2">${isNew ? `<button class="btn ghost" data-act="sheet-close">${esc(t('Cancel'))}</button>` : `<button class="btn ghost danger" data-act="acc-del" data-id="${esc(a.id)}">${esc(t('Delete'))}</button>`}<button class="btn" data-act="acc-save" data-id="${esc(a.id || '')}">${esc(t('Save'))}</button></div>`, { label: t('Account'), stack });
 }
 
 /** "Bank account · RM 1,200.00", without repeating a type the name already says ("Cash · Cash"). */
@@ -230,7 +230,7 @@ function findSettings() {
 function showFound(x) {
   if (!x?.el.isConnected) return;
   findQ = ''; $('#set-q').value = ''; findSettings();
-  for (let d = x.el.closest('details'); d; d = d.parentElement.closest('details')) { d.open = true; if (d.id === 's-features') featOpen = true; }
+  for (let d = x.el.closest('details'); d; d = d.parentElement.closest('details')) { d.open = true; if (d.id === 's-features') featOpen = true; if (d.id === 's-features-one') featOne = true; }
   const box = x.el.classList.contains('card') ? x.el : x.el.closest('.toggle, .field, .rowb, .lookrow, .btn, summary') || x.el;
   box.scrollIntoView({ behavior: 'smooth', block: 'center' });
   box.classList.remove('flash'); void box.offsetWidth; box.classList.add('flash');
@@ -336,6 +336,7 @@ export const settingsView = {
         <details><summary>${esc(t('What Tally remembers ({0})', rules.length + names.length))}</summary><p class="fine">${esc(t('When you change an item\'s category, Tally files that item the same way next time.'))} ${esc(t('When you fix an item\'s name, Tally reads it that way next time.'))}</p>
           <ul class="list">${rules.slice(0, 200).map(([k, v]) => `<li class="rowb"><span class="grow">${esc(k.replace(/^SHOP /, `${t('Shop')}: `))} → ${esc(catName(v))}</span><button class="icon-btn" data-act="rule-del" data-k="${esc(k)}" aria-label="${esc(t('Forget'))}">${ICON.x}</button></li>`).join('')}${names.slice(-200).reverse().map(([k, v]) => `<li class="rowb"><span class="grow">${esc(k)} → ${esc(v)}</span><button class="icon-btn" data-act="name-del" data-k="${esc(k)}" aria-label="${esc(t('Forget'))}">${ICON.x}</button></li>`).join('')}</ul></details></section>
       <section class="card"><h2>${esc(t('Privacy'))}</h2><p class="fine">${esc(t('No account, no ads, no tracking. Receipts are read on this phone. Tally goes online only for its own files, a Google Sheets link you paste, an exchange rate you ask for, feedback you send, and a Google Calendar reminder you add.'))}</p>
+        <p class="fine">${esc(t('The camera is used only when you tap Scan, and photos stay on this phone. A computer connection opens a short-lived link on your own Wi-Fi only while you turn it on. Notifications are used only for reminders you turn on.'))}</p>
         <div class="rowb">${ICON.image}<span class="grow"><b>${esc(t('Receipt photos'))}</b><small>${esc(t('{0} on this phone', new Set(S.tx.map(x => x.receiptId).filter(Boolean)).size))} · ${esc(settings().photoKeep > 0 ? t('kept {0} days', settings().photoKeep) : t('kept always'))}</small></span>
           <button class="btn small ghost" data-act="photos-manage">${esc(t('Manage'))}</button></div>
         <div class="rowb">${ICON.lock}<span class="grow"><b>${esc(t('Lock Tally'))}</b><small>${esc(!lockOn() ? t('Off') : settings().lock.kind === 'pass' ? t('On: password') : settings().lock.cred && !encOn() ? t('On: PIN, fingerprint or face') : t('On: PIN'))}</small></span>
@@ -346,7 +347,7 @@ export const settingsView = {
           : t('Your entries and photos are encrypted with your PIN. Someone with a copy of the phone could try every 4–6 digit PIN on a computer; a password of 8 or more characters stops that.'))}</p>
         <button class="btn ghost wide" data-act="net-check">${ICON.check}${esc(t('Check what Tally contacted'))}</button>
         <button class="btn ghost danger wide" data-act="erase">${ICON.trash}${esc(t("Erase Tally's data"))}</button>
-        <p class="legal">${legalLinks()}</p></section>
+        ${getLang() === 'ta' ? `<p class="fine">${esc(t('The full privacy policy is in English.'))}</p>` : ''}<p class="legal">${legalLinks()}</p></section>
       ${learnCard()}
       ${isNative ? `<section class="card" id="s-computer"><h2>${esc(t('Use Tally on your computer'))}</h2><p class="fine">${esc(t('A bigger screen for your expenses. Nothing to install on the computer.'))}</p><button class="btn ghost wide" data-act="desk-connect">${esc(t('Start connection'))}</button></section>` : ''}
       ${isNative ? `<section class="card"><h2>${esc(t('Receipt shortcut'))}</h2><p class="fine">${esc(t('Double-tap a volume button while Tally is open to open the receipt camera. It does nothing in other apps. Single presses still change the volume.'))}</p><label class="field"><span>${esc(t('Button'))}</span><select data-input="scan-shortcut" id="scan-shortcut"><option value="off">${esc(t('Off'))}</option><option value="up">${esc(t('Volume up'))}</option><option value="down">${esc(t('Volume down'))}</option></select></label><p class="fine">${esc(t('For receipts in another app, take a screenshot and share that image with Tally. No background screen access.'))}</p></section>` : ''}
@@ -1270,7 +1271,7 @@ export const act = {
     for (const [el, v] of rows) { const a = S.accounts.find(x => x.id === el.dataset.bt); if (a) await saveAccount({ ...a, opening: (a.opening || 0) + v - +el.dataset.now, typed: true }); }
     closeSheet(); render(); if (rows.length) toast(t('Saved'));
   },
-  'acc-edit': b => accountSheet(S.accounts.find(a => a.id === b.dataset.id) || {}),
+  'acc-edit': b => accountSheet(S.accounts.find(a => a.id === b.dataset.id) || (b.dataset.kind ? { kind: b.dataset.kind } : {}), !!b.dataset.stack),   // kind/stack: from the goal sheet, a savings account over it
   'acc-save': async b => {
     const name = $('#ac-name').value.trim(), nowEl = $('#ac-now');
     let opening = $('#ac-open').value.trim() ? calcAmount($('#ac-open').value) : 0;
@@ -1303,6 +1304,7 @@ export const act = {
     try { await deleteAccount(b.dataset.id); render(); toast(t('Deleted')); } catch { toast(t('This account has transactions. Move or delete them first.'), { k: 'warn' }); }
   },
   'set-find': b => showFound(hits[+b.dataset.i]),
+  'features-one': b => { const d = b.parentElement; d.open = featOne = !d.open; },
   'features-open': b => { const d = b.parentElement; d.open = featOpen = !d.open; },   // taps are handled here, not by the browser
   'cat-add': () => catAddSheet(),
   'cat-add-color': async b => { const name = $('#cat-name').value; catAddSheet(name, (await pickColor({ value: b.dataset.v })) || b.dataset.v); },

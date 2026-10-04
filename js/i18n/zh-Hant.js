@@ -2049,5 +2049,17 @@ export default {
 "ExpenseIQ foreign currencies are not supported. Choose a MYR-only backup. Nothing was imported.": "不支援 ExpenseIQ 外幣。請選擇僅含 MYR 的備份。未匯入任何內容。",
 "ExpenseIQ split, repeating and project entries are not supported. Nothing was imported.": "不支援 ExpenseIQ 分帳、定期及專案交易。未匯入任何內容。",
 "This ExpenseIQ version or financial layout is not supported. Choose a V3 backup of ordinary MYR entries. Nothing was imported.": "不支援此 ExpenseIQ 版本或財務結構。請選擇一般 MYR 交易的 V3 備份。未匯入任何內容。",
-"This ExpenseIQ backup has invalid data or unsupported financial forms. Keep the original file and check the supported limits. Nothing was imported.": "此 ExpenseIQ 備份含有無效資料或不支援的財務記錄。請保留原檔並核對支援範圍。未匯入任何內容。"
+"This ExpenseIQ backup has invalid data or unsupported financial forms. Keep the original file and check the supported limits. Nothing was imported.": "此 ExpenseIQ 備份含有無效資料或不支援的財務記錄。請保留原檔並核對支援範圍。未匯入任何內容。",
+  "Choose an account": "選擇帳戶",
+  "Create a savings account": "新增儲蓄帳戶",
+  "No account is picked, so the goal stays at RM 0. Pick the account the money sits in.": "還沒選帳戶，所以目標一直是 RM 0。請選存錢的那個帳戶。",
+  "Pick an account": "選帳戶",
+  "Progress is this account's balance. Money you put into it fills the bar.": "進度就是這個帳戶的餘額。存進去的錢會填滿進度條。",
+  "That account has nothing in it yet, so the goal starts at RM 0. It fills as money goes in.": "這個帳戶裡還沒有錢，所以目標從 RM 0 開始。有錢存入後才會增加。",
+  "This will show RM 0 until money is in the account": "帳戶裡有錢之前，這裡會顯示 RM 0",
+  "The camera is used only when you tap Scan, and photos stay on this phone. A computer connection opens a short-lived link on your own Wi-Fi only while you turn it on. Notifications are used only for reminders you turn on.": "只有在你點按「掃描」時才會使用相機，照片只留在這部手機上。電腦連線只在你開啟時，才會在你自己的 Wi-Fi 上開一個短暫的連線。通知只用於你開啟的提醒。",
+  "The full privacy policy is in English.": "完整的隱私權政策只有英文版。",
+  "Savings goals are easier: choose where the money sits, or create a savings account right there, and tap a goal on Home to edit it": "儲蓄目標更簡單：選擇錢放在哪裡，或直接在那裡新增儲蓄帳戶，在首頁點一下目標就能編輯",
+  "The camera button stays in the middle when you turn features off, and the features list stays open while you switch them": "關閉功能後相機按鈕仍在正中間，切換功能時功能清單也會一直保持展開",
+  "Privacy pages now explain the camera and connecting to your computer": "隱私頁面現在說明了相機和連接電腦的方式",
 };
