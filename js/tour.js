@@ -7,6 +7,9 @@ import { isNative } from './native.js';
 
 // Newest first. Written for users; each line is translated.
 export const WHATS_NEW = {
+  '1.13.9': [
+    "Import from ExpenseIQ backups, and Undo import now works even after you have used Tally for a moment",
+  ],
   '1.13.0': [
     'Split bills with several payers, assign tax and service, or treat a friend to the unpaid rest',
     'The Android app keeps your data in its own storage and opens files shared from other apps',

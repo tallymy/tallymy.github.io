@@ -427,7 +427,7 @@ export async function addAll({ accounts, tx, recurring, kv, receipts = [], del =
 }
 /** Write records as given, overwriting (a spouse's newer joint edits), all or nothing. `edit`: the user's own change
  *  (an import and its Undo), stamped and with joint delete markers like saveTxs and deleteTxs, in the same write. */
-export async function putAll({ accounts = [], tx = [], recurring = [], kv = {}, del = {}, edit = false, mark = true, expected = {}, receipts = [], beforeWrite = () => {} }) {
+export async function putAll({ accounts = [], tx = [], recurring = [], kv = {}, del = {}, edit = false, mark = true, expected = {}, expectedKeys = {}, receipts = [], beforeWrite = () => {} }) {
   if (edit) {
     // Only rows this write deletes and doesn't put back: a row put back next to its own marker was deleted by the next swap.
     const j = jointIds(), back = new Set(tx.map(t => t.id)), dead = new Set((del.tx || []).filter(id => !back.has(id)));
@@ -435,7 +435,7 @@ export async function putAll({ accounts = [], tx = [], recurring = [], kv = {}, 
     tx = tx.map(stamp);
     if (joint.length) kv = { ...kv, jointGone: withGone(joint) };
   }
-  await db.writeAtomic({ del, put: { accounts, tx, recurring, receipts, kv: kvRows(kv) }, expected, beforeWrite });
+  await db.writeAtomic({ del, put: { accounts, tx, recurring, receipts, kv: kvRows(kv) }, expected, expectedKeys, beforeWrite });
   await load();
 }
 /** The old address (it shares its site with another app): Tally has moved to NEW_HOME. */

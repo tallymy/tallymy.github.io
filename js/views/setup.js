@@ -495,6 +495,15 @@ export async function importFile(f) {
     if (f.size > (sealed ? SEALED_MAX : LIMITS.backupBytes)) return impErr(t('That file is too big (over 200 MB).'));
     impErr(t('Reading {0} ({1} MB)…', f.name || t('file'), Math.max(0.1, Math.round(f.size / 104857.6) / 10)));
     await backupStage(work, 'Reading the backup file…');
+    const probe = new TextDecoder().decode(await f.slice(0,64).arrayBuffer());
+    if (probe.startsWith('[EASYMONEY_BACKUP_')) {
+      if (f.size>16*1024*1024) throw new Error(t('ExpenseIQ native backups must be under 16 MB. Nothing was imported.'));
+      checkBackupWork(work);
+      if(!work.owner.querySelector('[data-act="sheet-close"]')) { const cancel=document.createElement('button');cancel.type='button';cancel.className='btn ghost wide';cancel.dataset.act='sheet-close';cancel.textContent=t('Cancel');work.owner.append(cancel); }
+      await backupStage(work, 'Checking backup contents…');
+      const expenseBytes = await f.arrayBuffer(); checkBackupWork(work);
+      return await importExpenseIQ(expenseBytes, work);
+    }
     const buf = await f.arrayBuffer();
     await backupStage(work, 'Checking the file format…');
     const head = new Uint8Array(buf.slice(0, 64));
@@ -655,7 +664,7 @@ function planMoves(fresh, accounts, otherId) {
  * Undo takes everything back: the rows, the transfers (restoring what they replaced), photos, new accounts, openings.
  * `before(fresh)` runs first (photos) and returns photo ids to remove again on Undo. → the ids of the accounts it touched.
  */
-async function commitImport(txs, label, { before = async () => [], accounts = [], kv = {}, newAccounts = [], undoMore = async () => {}, tourLater = false, structured = false, receipts = [], expected = {}, beforeCommit = () => {}, undoKv = () => ({}) } = {}) {
+async function commitImport(txs, label, { before = async () => [], accounts = [], kv = {}, newAccounts = [], undoMore = async () => {}, tourLater = false, structured = false, receipts = [], expected = {}, beforeCommit = () => {}, undoKv = () => ({}), undoEmptyStructured = false } = {}) {
   const split = structured ? structuredSplit(S.tx, txs) : splitDups(S.tx, txs, Object.fromEntries([...S.accounts, ...accounts].map(a => [a.id, a.name]))), { dups } = split;
   const outside = S.accounts.find(a => a.outside), { relink, taken } = outside && !structured ? relinkReloads(S.tx, split.fresh, outside.id) : { relink: [], taken: new Set() };
   const fresh = split.fresh.filter(x => !taken.has(x.id));   // reloads the wallet's file already had: now from this bank
@@ -681,14 +690,41 @@ async function commitImport(txs, label, { before = async () => [], accounts = []
   if (overCapAfter({ accounts: S.accounts, tx: S.tx, recurring: S.recurring, customCats: S.kv.customCats }, { accounts: stagedAccounts, tx: save, customCats: stagedKv.customCats }, { tx: gone, accounts: empty.map(a => a.id) })) {
     await deletePhotos(photoIds); throw new Error(t("Adding this would make Tally's data more than a backup can restore, so nothing was added."));
   }
+  const undoGeneration=bookGeneration(),undoWrites=undoEmptyStructured?structuredClone({accounts:[...new Map([...S.accounts.filter(a=>!empty.some(x=>x.id===a.id)),...stagedAccounts].map(x=>[x.id,x])).values()],tx:[...new Map([...S.tx.filter(x=>!gone.includes(x.id)),...save].map(x=>[x.id,x])).values()],recurring:S.recurring,kv:stagedKv}):null;
   beforeCommit();
   try { await putAll({ accounts: stagedAccounts, tx: save, del: { tx: gone, accounts: empty.map(a => a.id) }, kv: stagedKv, receipts, expected, beforeWrite: beforeCommit, edit: true }); }   // joint rows sync like any edit
   catch (e) { await deletePhotos(photoIds); throw e; }
+  let undoSnapshot=null;
+  if(undoEmptyStructured) { try {
+    undoSnapshot=await restoreSnapshot();
+    const strip=x=>{const {updatedAt,...rest}=x;return rest;},stable=x=>JSON.stringify(x,(_,v)=>v&&typeof v==='object'&&!Array.isArray(v)?Object.fromEntries(Object.keys(v).sort().map(k=>[k,v[k]])):v);
+    const ordered=rows=>[...rows].sort((a,b)=>a.id.localeCompare(b.id));
+    if(bookGeneration()!==undoGeneration || undoSnapshot.book.kv.bookGeneration!==undoGeneration || stable(ordered(undoWrites.tx.map(strip)))!==stable(ordered(undoSnapshot.book.tx.map(strip))) || stable(ordered(undoWrites.accounts))!==stable(ordered(undoSnapshot.book.accounts)) || stable(ordered(undoWrites.recurring))!==stable(ordered(undoSnapshot.book.recurring)) || Object.entries(undoWrites.kv).some(([key,value])=>stable(value)!==stable(undoSnapshot.book.kv[key])))throw new Error('stale undo');
+    const keys=['bookGeneration','settings','customCats','subcats','budgets','rules','subRules','goals','catIcons','catColors','jointGone','shopNames','itemNames'];
+    undoSnapshot.expected.kv=keys.map(id=>undoSnapshot.expected.kv.find(r=>r.id===id)||{id,value:undefined});
+    delete undoSnapshot.expectedKeys.kv; // Device-only dismissals/status may change after Home renders.
+  } catch { undoSnapshot=null; } }
   if (first && !tourLater) afterSetup();
   closeSheet(); go('home'); render();
   toast(t('Imported {0} from {1}', fresh.length, label) + (dups.length ? ` · ${t('{0} already here, skipped', dups.length)}` : '') + (pairs.length + relink.length ? ` · ${t('{0} top-ups counted as transfers between your accounts', pairs.length + relink.length)}` : '')
-    + (reloads.length ? ` · ${t('{0} wallet reloads with no bank line: counted as money moved from your bank, not as income.', reloads.length)}` : ''), { undo: !save.length ? null : async () => {
-    await putAll({ accounts: [...shifted, ...empty], tx: replaced, kv: undoKv(), del: { tx: save.map(x => x.id), accounts: newAccounts.filter(id => !S.tx.some(x => !kept.has(x.id) && (x.accountId === id || x.toAccountId === id))) }, edit: true, mark: false });   // the import's own rows, seconds old and never shared: no delete markers (1000 of them pushed out real ones)
+    + (reloads.length ? ` · ${t('{0} wallet reloads with no bank line: counted as money moved from your bank, not as income.', reloads.length)}` : ''), { undo: (!save.length && !undoEmptyStructured) || (undoEmptyStructured && !undoSnapshot) ? null : async () => {
+    let undoExpected = undoSnapshot?.expected;
+    if (undoSnapshot) {
+      const current = await restoreSnapshot();
+      // Progress notifications do not change finances. Keep the latest settings and
+      // atomically guard that exact record; every other original guard stays intact.
+      const financialSettings = value => {
+        const { learn, badgesSeen, checkedIn, firsts, tourDone, seenVersion, ...rest } = value || {};
+        return rest;
+      };
+      const stable = value => JSON.stringify(value, (_, v) => v && typeof v === 'object' && !Array.isArray(v)
+        ? Object.fromEntries(Object.keys(v).sort().map(k => [k, v[k]])) : v);
+      if (stable(financialSettings(current.book.kv.settings)) !== stable(financialSettings(undoSnapshot.book.kv.settings)))
+        throw new Error(t('The entry changed on your phone. Refresh and try again.'));
+      undoExpected = { ...undoSnapshot.expected, kv: undoSnapshot.expected.kv.map(row => row.id === 'settings'
+        ? current.expected.kv.find(row => row.id === 'settings') || { id: 'settings', value: undefined } : row) };
+    }
+    await putAll({ accounts: [...shifted, ...empty], tx: replaced, kv: undoKv(), del: { tx: save.map(x => x.id), accounts: newAccounts.filter(id => !S.tx.some(x => !kept.has(x.id) && (x.accountId === id || x.toAccountId === id))) }, ...(undoSnapshot ? { expected:undoExpected,expectedKeys:undoSnapshot.expectedKeys,beforeWrite:()=>{if(bookGeneration()!==undoSnapshot.book.kv.bookGeneration)throw new Error(t('The entry changed on your phone. Refresh and try again.'));} } : {}), edit: true, mark: false });   // the import's own rows, seconds old and never shared: no delete markers (1000 of them pushed out real ones)
     await deletePhotos([...photoIds, ...receipts.map(p => p.id)]);
     await undoMore(); render();
   } });
@@ -716,6 +752,31 @@ function structuredSplit(existing, rows) {
   for (const row of rows) (ids.has(row.id) ? dups : fresh).push(row);
   return { fresh, dups };
 }
+async function importExpenseIQ(buf, work) {
+  const { readCompatibleExpenseIQ } = await import('../expenseiq-compat.js');
+  checkBackupWork(work);
+  const mm = readCompatibleExpenseIQ(new Uint8Array(buf));
+  checkBackupWork(work);
+  IMP = { mm, generation: bookGeneration(), expenseiq: true };
+  openSheet(`<h2 class="sh-title">ExpenseIQ V3</h2>
+    <p class="warnbox">${esc(t('ExpenseIQ V3: ordinary MYR accounts and entries only. Split, repeating, project, foreign-currency and unsupported financial forms stop the import.'))}</p>
+    <ul class="list"><li>${esc(t('{0} transactions', mm.tx.length))}</li><li>${esc(t('{0} accounts: {1}', mm.accounts.length, mm.accounts.map(a => a.name).join(', ')))}</li><li>${esc(t('{0} transfers and {1} subcategories', mm.transfers, Object.values(mm.subcats).reduce((n,x)=>n+x.length,0)))}</li></ul>
+    <p class="fine">${esc(t('Opening balances and saved entry amounts are kept. Cash is recognised by its name; other accounts become bank accounts. Check the account types after importing.'))}</p>
+    <p class="fine">${esc(t('Dates use this device timezone ({0}). The source backup does not record its original timezone.', Intl.DateTimeFormat().resolvedOptions().timeZone))}</p>
+    <p class="warnbox">${esc(t('ExpenseIQ budgets, preferences, payee lists and original category colours are not fully restored. Keep the original backup.'))}</p>
+    ${mm.skipped ? `<p class="fine">${esc(t('Deleted transactions are not imported.'))}</p>` : ''}
+    ${mm.photos.length ? `<fieldset class="field"><legend>${esc(t('Receipt photos'))}</legend>
+      <p>${esc(t('This backup stores photo filenames only. Choose the matching full-size JPEG files, or explicitly import without photos.'))}</p>
+      <label class="checkline"><input type="radio" name="eiq-photo-mode" value="with" checked> ${esc(t('Include matching receipt photos'))}</label>
+      <label class="field"><span>${esc(t('Choose full-size JPEG companion photos'))}</span><input id="eiq-files" type="file" accept="image/jpeg,.jpg,.jpeg" multiple></label>
+      <p class="fine">${mm.photos.map(p=>esc(p.path.slice(7))).join('<br>')}</p>
+      <label class="checkline"><input type="radio" name="eiq-photo-mode" value="without"> ${esc(t('Import without receipt photos'))}</label>
+      <p class="fine">${esc(t('Filenames do not prove a photo belongs to this backup. Check the selected photos. All selected photos must decode before entries and photos are saved together.'))}</p>
+    </fieldset>` : ''}
+    <label class="checkline"><input id="eiq-reviewed" type="checkbox"> ${esc(t('I have checked these limits and the photo choice.'))}</label>
+    <p class="err" id="m2-err" role="alert"></p>
+    <div class="row2"><button class="btn ghost" data-act="sheet-close">${esc(t('Cancel'))}</button><button class="btn" data-act="m2-go">${esc(t('Import'))}</button></div>`, { label: t('Import') });
+}
 async function importMoney2Time(text) {
   const { readMoney2Time } = await import('../money2time.js');
   const mm = readMoney2Time(text);
@@ -731,11 +792,14 @@ async function importMoney2Time(text) {
     <div class="row2"><button class="btn ghost" data-act="sheet-close">${esc(t('Cancel'))}</button><button class="btn" data-act="m2-go">${esc(t('Import'))}</button></div>`, { label: t('Import') });
 }
 async function saveMoney2Time(b) {
+  const preview = IMP, expenseIQ = preview?.expenseiq === true;
+  const ownSheet = b.closest('.sheet');
+  const expenseChoice = expenseIQ ? { reviewed: !!ownSheet?.querySelector('#eiq-reviewed')?.checked, without: ownSheet?.querySelector('input[name="eiq-photo-mode"]:checked')?.value === 'without', files: [...(ownSheet?.querySelector('#eiq-files')?.files || [])] } : null;
   b.disabled = true;
   const work = beginBackupWork('Import');
   try {
     await backupStage(work, 'Checking backup contents…');
-    const preview = IMP;
+    if (IMP !== preview) throw new Error(t('The entry changed on your phone. Refresh and try again.'));
     if (preview.generation !== bookGeneration()) throw new Error(t('The entry changed on your phone. Refresh and try again.'));
     const db = await import('../db.js'), keys = ['bookGeneration','settings','customCats','subcats'];
     const kvExpected = await Promise.all(keys.map(async key => ({ id: key, value: (await db.get('kv', key)) ?? undefined })));
@@ -753,6 +817,34 @@ async function saveMoney2Time(b) {
     }
     if (oldCats.length + cats.length > 50) throw new Error(t("Adding this would make Tally's data more than a backup can restore, so nothing was added."));
     for (const x of mm.tx) if (remap.has(x.category)) x.category = remap.get(x.category);
+    if (expenseIQ) {
+      if (!expenseChoice.reviewed) throw new Error(t('Check the import limits and photo choice before saving.'));
+      if (mm.photos.length && expenseChoice.without) mm.photos = [];
+      else if (mm.photos.length) {
+        const required = new Set(mm.photos.map(p=>p.path)), selected = new Map(); let total = 0;
+        if (expenseChoice.files.length !== required.size) throw new Error(t('Choose every matching full-size JPEG, or select Import without receipt photos.'));
+        for (const file of expenseChoice.files) {
+          const path = 'photos/' + file.name;
+          if (!required.has(path) || selected.has(path) || file.size > LIMITS.photoBytes || (total += file.size) > LIMITS.backupBytes) throw new Error(t('Choose every matching full-size JPEG, or select Import without receipt photos.'));
+          selected.set(path, file);
+        }
+        const bytes = new Map(); let index = 0;
+        for (const [path,file] of selected) {
+          await backupStage(work, 'Reading receipt photos… {0} of {1}', index,selected.size);
+          bytes.set(path,new Uint8Array(await file.arrayBuffer())); checkBackupWork(work);
+          if (IMP !== preview) throw new Error(t('The entry changed on your phone. Refresh and try again.'));
+          index++;
+        }
+        const { mapExpenseIQPhotos } = await import('../expenseiq.js');
+        mm.photos = await mapExpenseIQPhotos(mm,bytes); checkBackupWork(work);
+        for (const p of mm.photos) {
+          const info=imageInfo(p.bytes);
+          if (!info || info.type!=='image/jpeg' || info.w*info.h>LIMITS.pixels) throw new Error(t('Receipt photos must all decode successfully. Entries and photos are saved together; a failure saves nothing.'));
+          p.width=info.w;p.height=info.h;
+        }
+      }
+    }
+
     const beforeSubs = structuredClone(S.kv.subcats || {}), subcats = structuredClone(beforeSubs);
     for (const [from, names] of Object.entries(mm.subcats)) {
       const key = remap.get(from) || from, merged = [...new Set([...(subcats[key] || []), ...names])];
@@ -790,10 +882,10 @@ async function saveMoney2Time(b) {
     // commitImport recalculates duplicate IDs but uses these same row objects and explicit guards.
     if (IMP !== preview) throw new Error(t('The entry changed on your phone. Refresh and try again.'));
     await backupStage(work, 'Saving entries and photos together…');
-    await commitImport(mm.tx, 'Money2Time', { structured: true, accounts, newAccounts: accounts.map(a => a.id), receipts, expected, beforeCommit: () => { checkBackupWork(work); },
-      undoKv: () => money2TimeUndoKv(mm.tx,cats,beforeSubs,subcats),
+    await commitImport(mm.tx, expenseIQ ? 'ExpenseIQ' : 'Money2Time', { structured: true, undoEmptyStructured: expenseIQ, accounts, newAccounts: accounts.map(a => a.id), receipts, expected, beforeCommit: () => { checkBackupWork(work); if(IMP!==preview)throw new Error(t('The entry changed on your phone. Refresh and try again.')); },
+      undoKv: () => expenseIQ ? {customCats:structuredClone(oldCats),subcats:structuredClone(beforeSubs)} : money2TimeUndoKv(mm.tx,cats,beforeSubs,subcats),
       kv: { customCats: [...oldCats, ...cats], subcats } });
-  } catch (e) { const el = $('#m2-err'); if (!e?.cancelled && el) el.textContent = t(e.message); b.disabled = false; }
+  } catch (e) { const el = ownSheet?.querySelector('#m2-err'); if (!e?.cancelled && el) el.textContent = t(e.message); b.disabled = false; }
   finally { finishBackupWork(work); }
 }
 async function importMoneyManager(buf, app) {
