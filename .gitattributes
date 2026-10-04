@@ -7,3 +7,5 @@
 
 # Preserve the exact bytes of this fictional native export used for regression tests.
 tests/fixtures/andromoney-device-owned.csv binary
+tests/fixtures/bluecoins-device-owned-expense.csv binary
+tests/fixtures/bluecoins-device-owned-transfer-photo.csv binary

@@ -56,8 +56,9 @@ for (const [file, id, { opening }] of APPS) test(`${id}: recognised; accounts, t
   assert.deepEqual(r.bal, { ...SAME, maybank: SAME.maybank + opening });
   assert.equal(r.txs.length, 7);
   const pay = r.txs.find(t => t.type === 'income' && t.amount === 350000), lunch = r.txs.find(t => t.amount === 1250);
-  assert.deepEqual([pay.date, pay.category, pay.accountId], ['2026-09-01', id === 'ynab' ? 'income' : 'salary', 'maybank']);   // YNAB files all income under Ready to Assign
+  assert.deepEqual([pay.date, pay.category, pay.accountId], ['2026-09-01', ['ynab', 'bluecoins'].includes(id) ? 'income' : 'salary', 'maybank']);   // YNAB: Ready to Assign; Bluecoins: source parent Employment (child Salary stays)
   assert.deepEqual([lunch.date, lunch.category, lunch.accountId], ['2026-09-03', 'dining', 'cash']);
+  if (id === 'bluecoins') { assert.equal(pay.sub, 'Salary'); assert.equal(lunch.sub, 'Restaurant'); }
   assert.match(`${lunch.merchant} ${lunch.note}`, /Nasi lemak/);
   assert.equal(r.txs.find(t => t.amount === 2000).category, 'income');
   assert.equal(r.txs.find(t => t.amount === 3000).category, 'transport');

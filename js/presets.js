@@ -99,9 +99,9 @@ export const PRESETS = [
   // (github.com/usmankaraamat/Hisaab src/import/bluecoins.js; Ivy Wallet CSVMapper.blueCoins). Transfers: Type
   // Transfer, category "(Transfer)" (Bluecoins' import template, github.com/satheeshds/bluecoins-utilities).
   { id: 'bluecoins', name: 'Bluecoins', need: ['type', 'date', 'amount', 'exchange rate', 'category group', 'category', 'account'],
-    cols: { date: ['date'], type: ['type'], merchant: ['name', 'title'], amount: ['amount'], category: ['category'], account: ['account'], note: ['notes'] },
-    transfer: c => low(c.get('type')) === 'transfer' || low(c.get('category')) === '(transfer)',
-    adjust: c => low(c.get('type')) === 'new account' || low(c.get('category')) === '(new account)' },   // an account's opening balance
+    cols: { date: ['date'], type: ['type'], merchant: ['name', 'title'], amount: ['amount'], category: ['category group'], sub: ['category'], account: ['account'], note: ['notes'] },
+    transfer: c => low(c.get('type')) === 'transfer' || low(c.raw('category')) === '(transfer)',
+    adjust: c => low(c.get('type')) === 'new account' || low(c.raw('category')) === '(new account)' },   // an account's opening balance
 
   // 1Money: "DATE, TYPE, FROM ACCOUNT, TO ACCOUNT / TO CATEGORY, AMOUNT, CURRENCY, AMOUNT 2, CURRENCY 2, TAGS, NOTES",
   // dates MM/dd/yy, unsigned amounts, TYPE Expense / Income / Transfer, one row per transfer (github.com/bladeours/

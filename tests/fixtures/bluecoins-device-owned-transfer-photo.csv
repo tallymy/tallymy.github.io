@@ -1,0 +1,4 @@
+﻿"Type","Date","Set Time","Name","Amount","Currency","Exchange Rate","Category Group","Category","Account","Notes","Grouping","Labels","Status"
+"Transfer","2026-10-04 12:21:29","12:21","OwnedMove","-2.00","MYR","1.0","(Transfer)","(Transfer)","Wallet","","","","None"
+"Transfer","2026-10-04 12:21:29","12:21","OwnedMove","2.00","MYR","1.0","(Transfer)","(Transfer)","Checking","","","","None"
+"Expense","2026-10-04 12:03:47","12:03","OwnedLunch","-6.00","MYR","1.0","Entertainment","Dining Out","Wallet","","","","None"
