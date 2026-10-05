@@ -2063,4 +2063,10 @@ export default {
   "The camera button stays in the middle when you turn features off, and the features list stays open while you switch them": "அம்சங்களை அணைத்தாலும் கேமரா பொத்தான் நடுவிலேயே இருக்கும்; அம்சங்களை மாற்றும்போது பட்டியலும் திறந்தே இருக்கும்",
   "Privacy pages now explain the camera and connecting to your computer": "தனியுரிமைப் பக்கங்கள் இப்போது கேமரா பற்றியும் உங்கள் கணினியுடன் இணைப்பது பற்றியும் விளக்குகின்றன",
   "Fixed a leftover red message in the savings goal form": "சேமிப்பு இலக்கு படிவத்தில் மீதமிருந்த சிவப்பு செய்தி சரிசெய்யப்பட்டது",
+  "Add money": "பணம் சேர்",
+  "Goal: {0}": "இலக்கு: {0}",
+  "Where is this money kept?": "இந்தப் பணம் எங்கே வைக்கப்பட்டுள்ளது?",
+  "This goal counts only money added after you set this account's balance.": "இந்தக் கணக்கின் இருப்பை நீங்கள் அமைத்த பிறகு சேர்த்த பணத்தை மட்டுமே இந்த இலக்கு எண்ணுகிறது.",
+  "Pick the account the money is kept in.": "இந்தப் பணம் வைக்கப்பட்டுள்ள கணக்கைத் தேர்ந்தெடுக்கவும்.",
+  "Savings goals have an Add money button: move money from your everyday account straight into the goal": "சேமிப்பு இலக்குகளில் இப்போது ‘பணம் சேர்’ பொத்தான் உள்ளது: தினசரிக் கணக்கிலிருந்து பணத்தை நேராக இலக்குக்கு மாற்றலாம்",
 };

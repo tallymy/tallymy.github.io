@@ -2064,4 +2064,10 @@ export default {
   "The camera button stays in the middle when you turn features off, and the features list stays open while you switch them": "关闭功能后相机按钮仍在正中间，切换功能时功能列表也会一直保持展开",
   "Privacy pages now explain the camera and connecting to your computer": "隐私页面现在说明了相机和连接电脑的方式",
   "Fixed a leftover red message in the savings goal form": "修复了储蓄目标表单中残留的红色提示",
+  "Add money": "存入",
+  "Goal: {0}": "目标：{0}",
+  "Where is this money kept?": "这笔钱存放在哪里？",
+  "This goal counts only money added after you set this account's balance.": "此目标只计算你设定该账户余额之后存入的钱。",
+  "Pick the account the money is kept in.": "请选择存放这笔钱的账户。",
+  "Savings goals have an Add money button: move money from your everyday account straight into the goal": "储蓄目标新增“存入”按钮：把日常账户的钱直接转进目标",
 };

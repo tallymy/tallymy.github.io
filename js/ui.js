@@ -71,9 +71,16 @@ export function donut(parts, center) {
 }
 
 // ---- sheets & toasts (from we go gim) ------------------------------------------------------------
-let sheetClose = null, settle = null, settled = null, reopen = false, popping = false;
-/** While a closed sheet's history step is being removed: a promise to wait on before navigating (app.js go). */
-export const settling = () => settle;
+// History: every open sheet owns one history step (so phone Back closes exactly the top one). `open` sheets are showing;
+// `have` steps are in the history; `inflight` is our own history.go(-n) (a promise to wait on before navigating).
+let sheetClose = null, open = 0, have = 0, inflight = null;
+function sync() {
+  if (inflight) return;   // its popstate syncs again
+  while (have < open) { history.pushState({ sheet: true, depth: (history.state?.depth || 0) + 1 }, ''); have++; }
+  if (have > open) { const n = have - open; const d = { n }; d.promise = new Promise(r => { d.done = r; }); inflight = d; history.go(-n); }   // sheets closed by code: their steps go in one move
+}
+/** While closed sheets' history steps are being removed: a promise to wait on before navigating (app.js go). */
+export const settling = () => { sync(); return inflight?.promise || null; };
 /** stack: open over the sheet already open (a confirmation), which comes back as it was when this one closes. */
 export function openSheet(html, { onClose, label = 'Dialog', stack = false } = {}) {
   const under = stack && sheetClose ? [...document.querySelectorAll('.scrim:not(.out)')].at(-1) : null, below = under ? sheetClose : null;
@@ -97,17 +104,14 @@ export function openSheet(html, { onClose, label = 'Dialog', stack = false } = {
       else if (!e.shiftKey && document.activeElement === f.at(-1)) { e.preventDefault(); f[0].focus(); }
     }
   });
-  if (settled) reopen = true;   // the last sheet's step is still being removed: this one takes a new step once it is
-  else if (!history.state?.sheet) history.pushState({ sheet: true, depth: (history.state?.depth || 0) + 1 }, ''); // Android back closes the sheet
+  open++; sync();   // Android back closes the sheet (if our last step is still being removed, this one takes a new step after it)
   sheetClose = () => {
-    sheetClose = below;
+    sheetClose = below; open--; queueMicrotask(sync);   // closed by code: its step goes too (a sheet opened in the same tick keeps it)
     wrap.classList.add('out'); wrap.style.pointerEvents = 'none';   // exit animation, then gone
     setTimeout(() => wrap.remove(), 200);
     if (under) under.removeAttribute('inert');
     else {
       app?.removeAttribute('inert');
-      // Closed by a button: its history step goes too, so back after it (and "back to Home") counts only real screens.
-      if (!popping && history.state?.sheet) { settle = new Promise(r => { settled = r; }); history.back(); }
     }
     if (opener?.isConnected) opener.focus({ preventScroll: true });
     onClose?.();
@@ -145,14 +149,13 @@ export function closeSheet() { sheetClose?.(); }
 export const sheetOpen = () => !!sheetClose;
 if (typeof window !== 'undefined') {
   window.addEventListener('popstate', () => {
-    if (settled) {   // our own step back after a sheet closed by a button
-      const done = settled; settled = settle = null;
-      if (reopen) { reopen = false; history.pushState({ sheet: true, depth: (history.state?.depth || 0) + 1 }, ''); }
-      return done();
+    if (inflight) {   // our own step back after sheets closed by code
+      const d = inflight; inflight = null; have = Math.max(0, have - d.n); d.done(); sync(); return;
     }
-    if (sheetClose) { popping = true; try { sheetClose(); } finally { popping = false; } }   // phone back: closes the sheet
+    if (have > 0) have--;
+    if (sheetClose) sheetClose();   // phone back: closes the top sheet (its step is the one just popped)
   });
-  window.addEventListener('hashchange', () => { popping = true; try { while (sheetClose) closeSheet(); } finally { popping = false; } });   // stacked ones too
+  window.addEventListener('hashchange', () => { while (sheetClose) closeSheet(); have = 0; });   // stacked ones too; the screen changed, the old steps are behind it
 }
 /** In-app confirmation (never window.confirm). Resolves true / false. */
 export function confirmSheet({ title, body = '', ok = t('Confirm'), no = t('Cancel'), danger = false }) {

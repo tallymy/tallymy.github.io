@@ -2063,4 +2063,10 @@ export default {
   "The camera button stays in the middle when you turn features off, and the features list stays open while you switch them": "機能をオフにしてもカメラボタンは中央のままで、機能の一覧は切り替えている間ずっと開いたままです",
   "Privacy pages now explain the camera and connecting to your computer": "プライバシーのページに、カメラとパソコンへの接続についての説明を追加しました",
   "Fixed a leftover red message in the savings goal form": "貯蓄目標フォームに赤いメッセージが残る不具合を修正しました",
+  "Add money": "お金を追加",
+  "Goal: {0}": "目標：{0}",
+  "Where is this money kept?": "このお金はどこにありますか？",
+  "This goal counts only money added after you set this account's balance.": "この目標は、この口座の残高を設定した後に追加したお金だけを数えます。",
+  "Pick the account the money is kept in.": "お金を置いている口座を選んでください。",
+  "Savings goals have an Add money button: move money from your everyday account straight into the goal": "貯金の目標に「お金を追加」ボタンを追加しました。普段使う口座から目標へ直接移せます",
 };

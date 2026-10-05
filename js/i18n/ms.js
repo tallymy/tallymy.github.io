@@ -2064,4 +2064,10 @@ export default {
   "The camera button stays in the middle when you turn features off, and the features list stays open while you switch them": "Butang kamera kekal di tengah apabila anda mematikan ciri, dan senarai ciri kekal terbuka semasa anda menukarnya",
   "Privacy pages now explain the camera and connecting to your computer": "Halaman privasi kini menerangkan tentang kamera dan sambungan ke komputer anda",
   "Fixed a leftover red message in the savings goal form": "Mesej merah yang tertinggal dalam borang matlamat simpanan telah dibetulkan",
+  "Add money": "Tambah wang",
+  "Goal: {0}": "Matlamat: {0}",
+  "Where is this money kept?": "Di mana wang ini disimpan?",
+  "This goal counts only money added after you set this account's balance.": "Matlamat ini hanya mengira wang yang ditambah selepas anda menetapkan baki akaun ini.",
+  "Pick the account the money is kept in.": "Pilih akaun tempat wang ini disimpan.",
+  "Savings goals have an Add money button: move money from your everyday account straight into the goal": "Matlamat simpanan kini ada butang Tambah wang: pindahkan wang dari akaun harian terus ke matlamat",
 };

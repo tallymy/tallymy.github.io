@@ -7,6 +7,9 @@ import { isNative } from './native.js';
 
 // Newest first. Written for users; each line is translated.
 export const WHATS_NEW = {
+  '1.13.12': [
+    'Savings goals have an Add money button: move money from your everyday account straight into the goal',
+  ],
   '1.13.11': [
     'Fixed a leftover red message in the savings goal form',
   ],
