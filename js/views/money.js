@@ -389,10 +389,15 @@ const billEv = x => {
 export async function postBills() {
   const tdy = today();
   if (!S.accounts.length) return 0;
+  // A bill marked later than tomorrow (a clock that was once far ahead) would stay silent and make a synced device refuse this book. Repair that mark to
+  // the latest payment already posted for the bill (none: no mark) and let the normal catch-up below decide; marks up to tomorrow are never touched.
+  const limit = addDays(tdy, 1), fixed = new Map();
+  for (const r of S.recurring) if (typeof r.last === 'string' && r.last > limit) { const f = { ...r }, d = S.tx.filter(x => x.bill === r.id && x.date <= limit).map(x => x.date).sort().at(-1); if (d) f.last = d; else delete f.last; fixed.set(r.id, f); }
+  const rules = S.recurring.map(r => fixed.get(r.id) || r);
   // A joint payment deleted here (or by the partner) is never posted again; a personal bill's always is.
-  const txs = unmarkedPayments(dueBillTxs(S.recurring, tdy, S.tx), S.kv.jointGone || {}, jointIds()).map(x => (S.accounts.some(a => a.id === x.accountId) ? x : { ...x, accountId: defaultAccount('bill') }));
+  const txs = unmarkedPayments(dueBillTxs(rules, tdy, S.tx), S.kv.jointGone || {}, jointIds()).map(x => (S.accounts.some(a => a.id === x.accountId) ? x : { ...x, accountId: defaultAccount('bill') }));
   if (txs.length) await saveTxs(txs);
-  for (const r of S.recurring) if (r.auto && !(r.last >= tdy)) await saveBill({ ...r, last: tdy }, { edited: false });
+  for (const r of rules) { if (r.auto && !(r.last >= tdy)) await saveBill({ ...r, last: tdy }, { edited: false }); else if (fixed.has(r.id)) await saveBill(r, { edited: false }); }
   if (txs.length) toast(txs.length === 1 ? t('Added {0} {1}', txs[0].merchant, fmtRM(txs[0].amount)) : t('Added {0} regular payments: {1}', txs.length, [...new Set(txs.map(x => x.merchant))].join(', ')), { icon: 'check', undo: async () => { await deleteTxs(txs.map(x => x.id)); render(); } });
   return txs.length;
 }

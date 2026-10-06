@@ -1,0 +1,14 @@
+/* Ordinary Tally sheet refinement; no new palette or font system. */
+.sync-review,.sync-change{min-width:0;overflow-wrap:anywhere}
+.sync-change{border-top:1px solid var(--line);padding-top:var(--sp-4);margin-top:var(--sp-4)}
+.sync-change h3,.sync-change h4{margin:0 0 var(--sp-2)}
+.sync-change dl{margin:0 0 var(--sp-3)}
+.sync-change dd{margin:0 0 var(--sp-2)}
+.sync-change .grid2>*{min-width:0}
+.sync-fields{font:var(--fs-sm)/1.5 var(--mono);white-space:pre-wrap;overflow-wrap:anywhere;max-height:15rem;overflow:auto}
+.sync-review nav{margin-top:var(--sp-4)}
+.main-sync-content{display:flex;flex-direction:column;gap:var(--sp-3);min-width:0;overflow-wrap:anywhere}
+.main-sync-content p{margin:0}
+.main-sync-content .rowb,.main-sync-content .grow{min-width:0}
+.sync-change summary{min-height:44px;display:flex;align-items:center;color:var(--accent);cursor:pointer}
+.sync-review nav .btn{min-width:0;white-space:normal;overflow-wrap:anywhere}

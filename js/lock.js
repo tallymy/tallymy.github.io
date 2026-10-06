@@ -155,20 +155,39 @@ export function pinGuard(check, st, now = () => performance.now()) {   // monoto
 // Stored as [fails, ms still to wait]; the wait restarts in full after a reload rather than trusting the clock.
 const tries = { get: () => { try { return JSON.parse(localStorage.getItem('tally-pin-tries')) || [0, 0]; } catch { return [0, 0]; } },
   set: ([fails, until]) => { try { localStorage.setItem('tally-pin-tries', JSON.stringify([fails, Math.max(0, until - performance.now())])); } catch {} } };
-let pending = null;
+let pending = null, gateActive = false;
+const privacyListeners = new Set();
+/** Ordinary PIN gate, missing encryption key, or a hidden privacy-locked app. */
+export function privacyLocked() {
+  try { return gateActive || !!pending || !!settings().lock?.enc && !db.getKey() || document.visibilityState === 'hidden' && lockOn(); }
+  catch { return true; } // A failed privacy check cannot authorize an operation.
+}
+export function onPrivacyChange(fn) {
+  if (typeof fn !== 'function') throw new TypeError('Privacy listener required');
+  privacyListeners.add(fn); return () => privacyListeners.delete(fn);
+}
+function notifyPrivacy() {
+  const value = privacyLocked();
+  for (const fn of [...privacyListeners]) { try { Promise.resolve(fn(value)).catch(() => {}); } catch {} }
+}
 const st = (([fails, left]) => ({ fails, until: left > 0 ? performance.now() + Math.min(left, 300_000) : 0 }))(tries.get());
 /** Cover everything with the lock screen until the PIN or fingerprint is right. Resolves at once without a lock. */
 export function gate() {
   if (!lockOn()) return Promise.resolve();
   if (pending) return pending;
+  // Publish the coalesced promise before synchronous listeners can re-enter gate.
+  let resolveGate, rejectGate;
+  const task = pending = new Promise((resolve, reject) => { resolveGate = resolve; rejectGate = reject; });
+  gateActive = true; notifyPrivacy(); // Before DOM activation, PIN work or any async storage.
+  try {
   const el = document.createElement('div');
   const kids = [...document.body.children], wasInert = new Set(kids.filter(x => x.inert));
   for (const x of kids) { x.inert = true; x.classList.add('veiled'); }
   el.className = 'lock'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-label', t('Tally is locked'));
   document.body.append(el);
-  pending = new Promise(resolve => {
+  { const resolve = resolveGate;
     const lock = settings().lock, pass = lock.kind === 'pass', bio = lock.cred && !lock.enc;
-    const done = () => { el.remove(); for (const x of kids) { x.classList.remove('veiled'); if (!wasInert.has(x)) x.inert = false; } pending = null; st.fails = 0; st.until = 0; tries.set([0, 0]); resolve(); };
+    const done = () => { el.remove(); for (const x of kids) { x.classList.remove('veiled'); if (!wasInert.has(x)) x.inert = false; } pending = null; gateActive = false; st.fails = 0; st.until = 0; tries.set([0, 0]); notifyPrivacy(); resolve(); };
     const err = m => { el.querySelector('#lock-err').textContent = m; };
     const main = () => {
       el.innerHTML = `<div class="lockbox"><div class="tour-ic">${ICON.lock}</div><h1>Tally</h1><p>${esc(pass ? t('Enter your password') : t('Enter your PIN'))}</p>
@@ -213,20 +232,22 @@ export function gate() {
     el.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'lock-pin') tryPin(); });
     el.addEventListener('input', e => { if (e.target.id === 'lock-pin' && !pass && e.target.value.length === lock.len) tryPin(); });
     main();
-  });
-  return pending;
+  }
+  } catch (error) { rejectGate(error); } // Keep the failed gate locked; never announce an unlock.
+  return task;
 }
 /** Lock again after more than a minute away; while hidden, the app switcher shows a blank screen. Then `onResume`. */
 export function watch(onResume) {
   let away = Date.now(), awayMono = performance.now();
   document.addEventListener('visibilitychange', async () => {
-    if (document.visibilityState === 'hidden') { away = Date.now(); awayMono = performance.now(); if (lockOn()) document.body.classList.add('veil'); return; }
+    if (document.visibilityState === 'hidden') { notifyPrivacy(); away = Date.now(); awayMono = performance.now(); if (lockOn()) document.body.classList.add('veil'); return; }
     document.body.classList.remove('veil');
     // Either clock past a minute, or the phone's clock moved back: lock. The phone's clock alone can be set back by
     // whoever holds the phone; the monotonic one can't, but may stop while the phone sleeps, so both are asked.
     // ponytail: a clock set to within a minute after leaving, with under a minute awake since, still gets in.
     const wall = Date.now() - away, mono = performance.now() - awayMono;
     if (lockOn() && (wall > AWAY || wall < 0 || mono > AWAY)) await gate();
+    notifyPrivacy();
     onResume();
   });
 }

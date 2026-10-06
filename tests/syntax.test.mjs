@@ -19,7 +19,9 @@ test('the check itself catches a broken file', () => assert.notEqual(check("expo
 
 test('every app file is cached for offline use by the service worker', () => {
   const sw = readFileSync(join(ROOT, 'sw.js'), 'utf8');
-  for (const f of walk('js')) assert.ok(sw.includes(`'./${f.replace(/\\/g, '/')}'`), `${f} missing from sw.js CORE`);
+  // Sync and native-pairing files load only when sync is on / in the native app: the SW caches them on first use, not at install (gates.mjs is the one boot file).
+  const lazy = f => (/^js[\\/]book-sync[\\/]/.test(f) && !/gates\.mjs$/.test(f)) || /^js[\\/]native-pair-/.test(f);
+  for (const f of walk('js').filter(f => !lazy(f))) assert.ok(sw.includes(`'./${f.replace(/\\/g, '/')}'`), `${f} missing from sw.js CORE`);
 });
 
 test('css: braces balance (an unclosed rule silently drops everything after it)', () => {

@@ -1,7 +1,7 @@
 // In-memory state over IndexedDB. Views read S; every change goes through a function here so it is saved.
 import * as db from './db.js';
 import { isNative, mirrorReminderDay } from './native.js';
-import { typedShift, CAPS, CAT_CODE, catName, sameCategory, mapCategory } from './io.js';
+import { typedShift, CAPS, checkedJointGone, CAT_CODE, catName, sameCategory, mapCategory } from './io.js';
 import { keepReceiptUntil, CATEGORIES, INCOME_CATEGORIES, itemKey, cycleKey, nextColor, pickAccount, balances, isFx, rateOf, toRM, ownCategories, movedCategories, owing } from './engine.js';
 
 export const S = { accounts: [], tx: [], recurring: [], kv: {} };
@@ -409,8 +409,10 @@ export async function restoreSnapshot() {
   const expectedKeys={accounts:book.accounts.map(r=>r.id),tx:book.tx.map(r=>r.id),recurring:book.recurring.map(r=>r.id),kv:kv.map(r=>r.key),receipts:receiptKeys};
   return {book,expected,expectedKeys};
 }
-export async function replaceAll({ accounts, tx, recurring, kv, receipts = [], expected = {}, expectedKeys = {}, beforeWrite = () => {} }) {
+export async function replaceAll({ accounts, tx, recurring, kv, receipts = [], expected = {}, expectedKeys = {}, beforeWrite = () => {}, restoreJointGone }) {
   const nextKv = Object.fromEntries(Object.entries(kv || {}).filter(([key]) => !TRANSIENT_KV.includes(key)));
+  // Only the explicit normal-backup Replace caller opts into these validated markers.
+  if (restoreJointGone !== undefined) nextKv.jointGone = checkedJointGone(restoreJointGone);
   await db.writeAtomic({ clear: ['accounts', 'tx', 'recurring', 'receipts'], del: { kv: [...BACKUP_KV, ...TRANSIENT_KV] }, put: { accounts, tx, recurring, receipts, kv: kvRows({ ...nextKv, bookGeneration: uid('book_') }) }, expected, expectedKeys, beforeWrite });
   await load();
   if (typeof globalThis.document?.dispatchEvent === 'function') document.dispatchEvent(new Event('tally:book-replaced'));

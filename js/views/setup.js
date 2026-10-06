@@ -7,7 +7,7 @@ import { keepReceiptUntil, fmtRM, parseAmount, balances, ACCOUNT_KINDS, CATEGORI
 import { ownKey, fileToRows, reshape, guessMapping, headerRow, rowsToTx, currencyReview, openingFromBalance, mapCategory, sameCategory, OTHER_NAME, catName as theirCatName, photosToWrite, fitCats, overCap, overCapAfter, SEALED_MAX, backupFits, parseCSV, sheetCsvUrl, sealBackup, openBackup, isSealed, toCSV, toTSV, toXlsx, txRows, toQIF, makeBackup, readBackup, mergeBackup, backupSettings, download, shareFile, cleanText, importIds, LIMITS, zipStore, unzip, BACKUP_JSON, makeJointShare, relinkReloads, mergeJoint, readCapped, imageInfo, splitDups, pairTransfers, asTransfer, hash, cleanDesc, accountNames, isMoneyRow, rowCategory, reloadTransfers, typedShift, isAtm } from '../io.js';
 import { detectPreset } from '../presets.js';
 import { parseStatement, statementToTx, linesFromItems, detectProvider, guessKind, PAGE_BREAK, isWallet } from '../statement.js';
-import { render, go, APP_VERSION, MAKER, CONTACT } from '../app.js';
+import { render, go, APP_VERSION, MAKER, CONTACT, syncEntry } from '../app.js';
 import { openFeedback } from '../feedback.js';
 import { bookGeneration, restoreSnapshot } from '../state.js';
 import { isNative, reminderStatus, configureReminder } from '../native.js';
@@ -292,6 +292,8 @@ export const settingsView = {
     return `<header class="top"><button class="icon-btn" data-act="back" data-to="home" aria-label="${esc(t('Back'))}">${ICON.back}</button><h1>${esc(t('Settings'))}</h1><span></span></header>
       <div class="sfind" role="search"><label class="search">${ICON.search}<input id="set-q" type="search" data-input="set-q" value="${esc(findQ)}" placeholder="${esc(t('Search settings'))}" aria-label="${esc(t('Search settings'))}" aria-controls="set-hits" autocomplete="off"></label>
         <ul class="list" id="set-hits" aria-label="${esc(t('Search settings'))}"></ul><p class="fine" id="set-none" role="status"></p></div>
+      ${syncEntry?.mainBookCard() ?? ''}
+      ${syncEntry?.savedSafetyCard() ?? ''}
       <nav class="jumps chips" aria-label="${esc(t('Go to'))}">${[['s-backup', t('Backup & restore')], ...(isNative ? [['s-computer', t('Connect to computer')]] : []), ['s-accounts', t('Accounts')], ['s-cats', t('Categories')], ['look', t('Language & text size')], ['remind', t('Daily reminder')], ['s-help', t('Help and feedback')]].map(([id, l]) => `<button class="chip" data-act="jump" data-to="${id}">${esc(l)}</button>`).join('')}</nav>
       ${featuresCard()}
       ${lookCard()}
@@ -1031,7 +1033,7 @@ async function restoreText(text, zip = {}) {
     const keptPhotos = new Set(local.tx.map(x => x.receiptId).filter(Boolean));
     const gonePhotos = [...new Set((sample?.tx || []).map(x => x.receiptId).filter(id => id && !keptPhotos.has(id)))];
     await addAll({ ...restored, receipts, expected:guard.expected, expectedKeys:guard.expectedKeys, beforeWrite:()=>commitBackupWork(work), del: { ...removed, receipts: gonePhotos } });
-  } else await replaceAll({ ...restored, receipts, expected:guard.expected, expectedKeys:guard.expectedKeys, beforeWrite:()=>commitBackupWork(work) });
+  } else await replaceAll({ ...restored, receipts, restoreJointGone: data.kv.jointGone, expected:guard.expected, expectedKeys:guard.expectedKeys, beforeWrite:()=>commitBackupWork(work) });
   if (settings().lang && settings().lang !== getLang()) setLang(settings().lang);
   document.documentElement.style.fontSize = `${settings().textSize || 100}%`; applyLook(settings());
   if (!settings().tourDone) await markSeen();   // a restored backup means someone who knows the app
@@ -1100,7 +1102,7 @@ function askPassword() {
 }
 const warnMissingPhotos = n => { if (n) toast(t('{0} receipt photos could not be included in this backup.', n), { k: 'warn' }); };
 const photoCount = () => new Set(S.tx.map(x => x.receiptId).filter(Boolean)).size;
-const backupFile = () => ({ details: { transactions: S.tx.length, generation: bookGeneration() ?? null }, name: `tally-backup-${today()}.json`, text: makeBackup({ accounts: S.accounts, tx: S.tx, recurring: S.recurring, kv: { budgets: S.kv.budgets, rules: S.kv.rules, customCats: S.kv.customCats, shopNames: S.kv.shopNames || {}, itemNames: S.kv.itemNames || {}, catColors: S.kv.catColors, catIcons: S.kv.catIcons, goals: S.kv.goals, subcats: S.kv.subcats || {}, subRules: S.kv.subRules || {}, settings: backupSettings({ monthStart: 1, weekStart: 1, textSize: 100, ...settings() }) } }) });
+const backupFile = () => ({ details: { transactions: S.tx.length, generation: bookGeneration() ?? null }, name: `tally-backup-${today()}.json`, text: makeBackup({ accounts: S.accounts, tx: S.tx, recurring: S.recurring, kv: { budgets: S.kv.budgets, rules: S.kv.rules, customCats: S.kv.customCats, shopNames: S.kv.shopNames || {}, itemNames: S.kv.itemNames || {}, catColors: S.kv.catColors, catIcons: S.kv.catIcons, goals: S.kv.goals, subcats: S.kv.subcats || {}, subRules: S.kv.subRules || {}, jointGone: S.kv.jointGone || {}, settings: backupSettings({ monthStart: 1, weekStart: 1, textSize: 100, ...settings() }) } }) });
 // ---- joint accounts: a file for the spouse, and theirs merged in -----------------------------------------------------
 const jointTx = () => { const j = jointIds(); return S.tx.filter(x => j.has(x.accountId) || j.has(x.toAccountId)); };
 const jointFile = () => ({ name: `tally-joint-${today()}.json`, text: makeJointShare({ accounts: S.accounts, tx: S.tx, kv: S.kv, recurring: S.recurring }, settings().myName || '') });
@@ -1161,6 +1163,8 @@ async function backedUp(msg, receipt) {
 
 // ---- actions ---------------------------------------------------------------------------------------------------------------
 export const act = {
+  'book-sync-open': () => syncEntry?.openMainBookSync(),
+  'saved-safety-open': () => syncEntry?.openSavedSafety(),
   'desk-connect': () => import('../desk-host.js').then(m => m.openDesk()),
   // Receipt photos off the phone, entries kept: now, or automatically after a while. LHDN can ask for receipts behind a
   // tax-relief claim for 7 years, so their download comes first.

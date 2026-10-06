@@ -86,7 +86,7 @@ test('every page has a CSP that defaults to self, and no tracked page loads a sc
   const pages = readdirSync(ROOT).filter(f => f.endsWith('.html'));
   assert.ok(pages.length >= 4);
   for (const f of pages) {
-    assert.match(csp(read(f)), /default-src 'self'/, f);
+    assert.match(csp(read(f)), f === 'sync-signal.html' ? /default-src 'none'/ : /default-src 'self'/, f);   // the sync leaf is stricter than self
     assert.ok(!/<script[^>]+src=["']?https?:/i.test(read(f)), f);
   }
 });

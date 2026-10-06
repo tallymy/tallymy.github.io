@@ -1,0 +1,5 @@
+.safety-review pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:20rem;overflow:auto;font:inherit;font-size:.875rem;line-height:1.5;background:var(--bg);padding:1rem;border-radius:12px}
+.safety-review article{padding-block:1rem;border-bottom:1px solid var(--line)}
+.safety-consent{display:flex;align-items:flex-start;gap:.75rem;padding-block:1rem;min-height:44px;line-height:1.5}
+.safety-consent input{flex:0 0 auto;margin-top:.25rem}
+.safety-review h4,.safety-review h5{overflow-wrap:anywhere}

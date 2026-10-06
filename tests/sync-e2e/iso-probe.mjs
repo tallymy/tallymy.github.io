@@ -1,0 +1,13 @@
+import { chromium } from 'playwright';
+import { startServer, spki } from './serve.mjs';
+const root = process.argv[2];
+const web = await startServer({ root, enableGates: false });
+const browser = await chromium.launch({ headless: true, channel: 'chromium', args: ['--host-resolver-rules=MAP tallymy.github.io 127.0.0.1:' + web.port, '--ignore-certificate-errors-spki-list=' + await spki(), '--no-proxy-server'] });
+const ctx = await browser.newContext(); const page = await ctx.newPage();
+await page.goto('https://tallymy.github.io/404.html');
+await page.evaluate(async () => { const db = await import('/js/db.js'); await db.init(); await db.writeAtomic({ put: { kv: [{ key: 'settings', value: { lang: 'en', seenVersion: '1.13.10', learnHidden: true, onboarded: true, tourDone: true, photoTipsSeen: true } }] } }); });
+await page.goto('https://tallymy.github.io/index.html#/settings');
+await page.waitForFunction(() => navigator.serviceWorker.getRegistration().then(r => r?.active?.state === 'activated'), null, { timeout: 90000 });
+await page.reload(); await page.waitForFunction(() => !!navigator.serviceWorker.controller); await page.waitForTimeout(2000);
+console.log(root, 'iso', await page.evaluate(() => crossOriginIsolated), 'sw v', await page.evaluate(() => caches.keys()));
+await browser.close(); await web.close();

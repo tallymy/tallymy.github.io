@@ -1,7 +1,7 @@
 // Phone-authoritative desktop changes. Plain records in, one guarded atomic write out.
 import { typedShift } from './io.js';
 import { validIso, owing, isFx } from './engine.js';
-export { sdpFingerprint, pairingCode } from './desk-pair.js';
+export { sdpFingerprint, sasCode, sasCommit, sasHandshake } from './desk-pair.js';
 export const deskAccount = a => !!a && !owing(a) && !isFx(a) && (!a.scope || a.scope === 'me' || a.scope === 'personal');
 export const deskEditable = x => ['expense', 'income'].includes(x.type) && !x.items?.length && !x.receiptId && !x.split && !x.splitOf && !x.down && !x.repaidBy && !x.repaidTo && !x.billId && !x.refundOf && !x.refund && !x.spouse;
 export const recordVersion = x => JSON.stringify(x, (_, v) => v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.keys(v).sort().map(k => [k, v[k]])) : v);

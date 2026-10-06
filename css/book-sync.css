@@ -1,0 +1,13 @@
+/* Ordinary Settings extension; all type, surfaces and spacing inherit Tally. */
+.sync-sheet{display:flex;flex-direction:column;gap:var(--sp-3);min-width:0;overflow-wrap:anywhere}
+.sync-sheet .sheethead{min-width:0}.sync-sheet .sh-title{min-width:0;overflow-wrap:anywhere}
+.sync-sheet .code{font:600 var(--fs-xl)/1.4 var(--mono);letter-spacing:.1em;text-align:center;font-variant-numeric:tabular-nums;margin:var(--sp-3) 0}
+.sync-qr{width:min(16rem,100%);height:auto;align-self:center;background:#fff;padding:.75rem;border-radius:var(--radius)}
+.sync-difference{border-top:1px solid var(--line);padding-top:var(--sp-4)}
+.sync-difference h4,.sync-difference p{margin:0 0 var(--sp-3)}
+.sync-sheet .row2,.sync-sheet .grid2{min-width:0}.sync-sheet .row2>*{min-width:0;overflow-wrap:anywhere}
+.sync-sheet .sheetfoot{margin-top:var(--sp-3)}
+
+.sync-remember { display: flex; align-items: center; gap: var(--sp-2); min-height: 44px; margin-bottom: var(--sp-3); cursor: pointer; }
+.sync-remember input { flex: 0 0 1.25rem; width: 1.25rem; height: 1.25rem; }
+.sync-remember span { min-width: 0; overflow-wrap: anywhere; }

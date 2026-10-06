@@ -947,6 +947,14 @@ const list = (x, max) => (Array.isArray(x) ? x.slice(0, max) : []);
 const upd = n => (Number.isSafeInteger(n) && n > 0 ? { updatedAt: Math.min(n, Date.now()) } : {}); // a file can't claim to be edited in the future
 /** A creation time from a file: 2000 to tomorrow, else 0 (unknown). Year 500 became '500-06-15' in Home's banner and crashed it. */
 export const okMs = n => (Number.isSafeInteger(n) && n >= Date.UTC(2000, 0, 1) && n <= Date.now() + 864e5 ? n : 0);
+// Known book metadata only: refuse invalid additions instead of silently dropping them.
+const sampleFlag = r => { if (!Object.hasOwn(r, 'sample')) return {}; if (typeof r.sample !== 'boolean') throw new Error('This backup has an invalid sample-data flag. Nothing was restored.'); return { sample: r.sample }; };
+const recurringCreated = r => { if (!Object.hasOwn(r, 'createdAt')) return {}; const n = r.createdAt; if (!Number.isSafeInteger(n) || (n !== 0 && okMs(n) !== n)) throw new Error('This backup has an invalid bill creation time. Nothing was restored.'); return { createdAt: n }; };
+const validFriends = v => Array.isArray(v) && v.length <= 12 && v.every(s => typeof s === 'string' && s.length > 0 && s.length <= 20 && cleanText(s, 20) === s && !RESERVED.has(s));
+export function checkedJointGone(value) {
+  if (!isObj(value) || Object.getPrototypeOf(value) !== Object.prototype || Object.keys(value).length > 1000 || !Object.entries(value).every(([id, at]) => okId(id) && Number.isSafeInteger(at) && at > 0 && okMs(at) === at && at <= Date.now())) throw new Error('This backup has invalid shared-entry deletion markers. Nothing was restored.');
+  return Object.fromEntries(Object.entries(value));
+}
 /** The most a backup holds: readBackup refuses a whole backup over any of these, so nothing may store more (overCap). */
 export const CAPS = { accounts: 200, tx: 200_000, recurring: 500, customCats: 50 };
 /** The first limit these records are over ('' when none): a backup of them would not restore. */
@@ -980,7 +988,7 @@ export function readBackup(text) {
   const cat = c => (ALL_CATS.some(x => x.id === c) || customIds.has(c) ? c : 'other');
   const accounts = list(d.accounts, 200).filter(a => isObj(a) && okId(a.id))
     .map(a => ({ id: a.id, name: cleanText(a.name, 60) || 'Account', kind: [...ACCOUNT_KINDS, ...OWING_KINDS].includes(a.kind) ? a.kind : 'cash', opening: okSigned(a.opening) ? a.opening : 0, createdAt: okMs(+a.createdAt), ...((a.scope === 'joint' || a.scope === 'business') && !OWING_KINDS.includes(a.kind) ? { scope: a.scope } : {}),   // what friends owe is never joint
-      ...(/^[A-Z]{3}$/.test(a.currency) && a.currency !== 'MYR' ? { currency: a.currency, ...(+a.rate > 0 && +a.rate < 1e5 ? { rate: +a.rate } : {}) } : {}), ...(a.outside === true ? { outside: true } : {}), ...(typeof a.typed === 'boolean' ? { typed: a.typed } : {}), ...upd(a.updatedAt) }));
+      ...(/^[A-Z]{3}$/.test(a.currency) && a.currency !== 'MYR' ? { currency: a.currency, ...(+a.rate > 0 && +a.rate < 1e5 ? { rate: +a.rate } : {}) } : {}), ...(a.outside === true ? { outside: true } : {}), ...(typeof a.typed === 'boolean' ? { typed: a.typed } : {}), ...sampleFlag(a), ...upd(a.updatedAt) }));
   const ids = new Set(accounts.map(a => a.id));
   // A friend's name (a split bill): as the split sheet takes it, and never a key that reaches an object's prototype.
   const friend = v => { const s = typeof v === 'string' ? cleanText(v, 20) : ''; return s && !RESERVED.has(s) ? s : ''; };
@@ -1007,15 +1015,16 @@ export function readBackup(text) {
       ...(okId(t.receiptId) ? { receiptId: t.receiptId } : {}),
       ...(okId(t.refundOf) ? { refundOf: t.refundOf } : {}), ...(validIso(t.warranty) ? { warranty: t.warranty } : {}), ...(validIso(t.returnBy) ? { returnBy: t.returnBy } : {}),
       ...(cleanText(t.by, 30) ? { by: cleanText(t.by, 30) } : {}), ...(t.spouse === true ? { spouse: true } : {}), ...(t.type === 'expense' && (t.relief === 'none' || RELIEFS.some(r => r.id === t.relief)) ? { relief: t.relief } : {}), ...upd(t.updatedAt),
-      ...(okId(t.bill) ? { bill: t.bill } : {}),
+      ...(okId(t.bill) ? { bill: t.bill } : {}), ...sampleFlag(t),
     }));
   const recurring = list(d.recurring, 500).filter(r => isObj(r) && okId(r.id) && okAmt(r.amount))
     .map(r => ({ id: r.id, name: cleanText(r.name, 60) || 'Bill', amount: r.amount, category: cat(r.category), accountId: ids.has(r.accountId) ? r.accountId : accounts[0]?.id, day: Math.min(31, Math.max(1, Math.trunc(+r.day) || 1)), key: cleanText(r.key, 60),
       // Bills that add themselves (0.4.0): how often, from when, how many or until when, and the last day they ran.
       ...(['weekly', 'yearly'].includes(r.freq) ? { freq: r.freq } : {}), auto: r.auto === true, ...(Number.isInteger(r.count) && r.count > 0 && r.count <= 600 ? { count: r.count } : {}),
-      ...['start', 'until', 'last'].reduce((o, k) => (validIso(r[k]) ? { ...o, [k]: r[k] } : o), {}), ...upd(r.updatedAt) }));
+      ...['start', 'until', 'last'].reduce((o, k) => (validIso(r[k]) ? { ...o, [k]: r[k] } : o), {}), ...recurringCreated(r), ...sampleFlag(r), ...upd(r.updatedAt) }));
   const kv = {};
   if (isObj(d.kv)) {
+    if (Object.hasOwn(d.kv, 'jointGone')) kv.jointGone = checkedJointGone(d.kv.jointGone);
     const bud = b => ({ total: okAmt(b.total) ? b.total : 0, byCat: Object.fromEntries(Object.entries(isObj(b.byCat) ? b.byCat : {}).filter(([k, v]) => cat(k) === k && okAmt(v))) });
     if (isObj(d.kv.budgets)) kv.budgets = { ...bud(d.kv.budgets), ...(isObj(d.kv.budgets.joint) ? { joint: { ...bud(d.kv.budgets.joint), ...upd(d.kv.budgets.joint.updatedAt) } } : {}), ...(isObj(d.kv.budgets.business) ? { business: bud(d.kv.budgets.business) } : {}) };
     if (isObj(d.kv.rules)) kv.rules = Object.fromEntries(Object.entries(d.kv.rules).slice(0, 5000).map(([k, v]) => [cleanText(k, 70), cat(v)]).filter(([k]) => k && !RESERVED.has(k)));
@@ -1031,13 +1040,14 @@ export function readBackup(text) {
     if (isObj(d.kv.catIcons)) kv.catIcons = Object.fromEntries(Object.entries(d.kv.catIcons).slice(0, 100).filter(([k, v]) => cat(k) === k && Object.hasOwn(CAT_ICONS, v)));
     // Savings goals: at most 20, each rebuilt from its checked fields (no other keys come through); a link only to an account in the file.
     if (Array.isArray(d.kv.goals)) kv.goals = d.kv.goals.slice(0, 20).filter(g => isObj(g) && okId(g.id) && okAmt(g.target) && g.target > 0)
-      .map(g => ({ id: g.id, name: cleanText(g.name, 30) || 'Goal', target: g.target, ...(validIso(g.by) ? { by: g.by } : {}), ...(ids.has(g.accountId) ? { accountId: g.accountId } : {}), createdAt: okMs(+g.createdAt) }));
+      .map(g => ({ id: g.id, name: cleanText(g.name, 30) || 'Goal', target: g.target, ...(validIso(g.by) ? { by: g.by } : {}), ...(ids.has(g.accountId) ? { accountId: g.accountId } : {}), createdAt: okMs(+g.createdAt), ...sampleFlag(g) }));
   }
   return { accounts, tx, recurring, kv, settings: backupSettings(d.kv?.settings), dropped: (Array.isArray(d.tx) ? d.tx.length : 0) - tx.length, ...(d.kind === 'joint' ? { joint: true, by: cleanText(d.by, 30),
     gone: Object.fromEntries(list(d.gone, 1000).filter(g => Array.isArray(g) && okId(g[0]) && Number.isSafeInteger(g[1]) && g[1] > 0).map(([id, at]) => [id, Math.min(at, Date.now())])) } : {}) };
 }
 /** Settings a backup carries, each checked: how Tally counts and looks, and your name. Never the app PIN, import memory or first-run flags. */
 const SETTINGS = {
+  friends: validFriends, sample: v => typeof v === 'boolean',
   quickAccount: v => okId(v),
   monthStart: v => Number.isInteger(v) && ((v >= 1 && v <= 28) || v === -1 || v === -2), weekStart: v => v === 0 || v === 1, lang: v => ['en', 'ms', 'zh', 'zh-Hant', 'ja', 'ta'].includes(v),
   textSize: v => [100, 115, 130].includes(v), theme: v => ['light', 'dark'].includes(v), accent: v => /^#[0-9a-f]{6}$/i.test(v),
@@ -1052,7 +1062,10 @@ const SETTINGS = {
   movedCats: v => isObj(v) && Object.entries(v).every(([k, to]) => CATEGORIES.slice(0, -1).some(c => c.id === k) && typeof to === 'string' && (CATEGORIES.some(c => c.id === to) || /^c_[\w-]{1,40}$/.test(to)) && !Object.hasOwn(v, to)),
   homeHide: v => Array.isArray(v) && v.length <= 20 && v.every(x => /^[\w-]{1,20}$/.test(x)), noSpend: v => Array.isArray(v) && v.length <= 400 && v.every(validIso),
 };
-export const backupSettings = s => Object.fromEntries(Object.entries(isObj(s) ? s : {}).filter(([k, v]) => Object.hasOwn(SETTINGS, k) && SETTINGS[k](v)).map(([k, v]) => [k, k === 'myName' ? cleanText(v, 30) : v]));
+export const backupSettings = s => {
+  if (isObj(s) && ((Object.hasOwn(s, 'friends') && !validFriends(s.friends)) || (Object.hasOwn(s, 'sample') && typeof s.sample !== 'boolean'))) throw new Error('This backup has invalid sample-data settings or friend names. Nothing was restored.');
+  return Object.fromEntries(Object.entries(isObj(s) ? s : {}).filter(([k, v]) => Object.hasOwn(SETTINGS, k) && SETTINGS[k](v)).map(([k, v]) => [k, k === 'myName' ? cleanText(v, 30) : v]));
+};
 /** The receipt photos an import may write: those of the rows it adds or updates, never an id that another row on this
  *  phone (`before`) already uses. A file can't overwrite a photo it doesn't own. */
 export const photosToWrite = (rows, before) => {
@@ -1076,6 +1089,7 @@ export function fitCats(have, fileCats, used, rows) {
 const photoUsers = rows => { const m = new Map(); for (const t of rows) if (t.receiptId) (m.get(t.receiptId) || m.set(t.receiptId, new Set()).get(t.receiptId)).add(t.id); return m; };
 /** Merge restore: keep everything local, add what the backup has that we don't (by id). Local settings win. */
 export function mergeBackup(local, incoming) {
+  if (Object.keys(incoming.kv.jointGone || {}).length) throw new Error('This backup contains shared-entry deletion markers. Use Replace to keep them; Merge will not apply them.');
   const merge = (a, b) => { const ids = new Set(a.map(x => x.id)); return [...a, ...b.filter(x => !ids.has(x.id))]; };
   const budgets = local.kv.budgets?.total || Object.keys(local.kv.budgets?.byCat || {}).length ? local.kv.budgets : incoming.kv.budgets || local.kv.budgets;
   const jb = local.kv.budgets?.joint || incoming.kv.budgets?.joint;

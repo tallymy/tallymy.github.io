@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { deskWrite, deskEditable, deskAccount, recordVersion, pairingCode, sdpFingerprint } from '../js/desk-protocol.js';
+import { deskWrite, deskEditable, deskAccount, recordVersion, sasCode, sdpFingerprint } from '../js/desk-protocol.js';
 const day = '2026-10-03';
 const id = 'dt_12345678-1234-1234-1234-123456789abc';
 const state = () => ({ accounts: [{ id: 'bank', kind: 'bank', scope: 'me', opening: 10000, typed: true, createdAt: new Date(2026, 9, 3).getTime() }], tx: [], settings: {}, categories: [{ id: 'dining', type: 'expense' }, { id: 'salary', type: 'income' }] });
@@ -47,10 +47,11 @@ test('computer category or type changes drop an old subcategory, unchanged categ
   assert.equal(save({ category: 'transport' }).sub, undefined);
   assert.equal(save({ type: 'income', category: 'salary' }).sub, undefined);
 });
-test('both devices derive the same pairing number, bound to both encryption certificates', async () => {
-  const fp = n => `a=fingerprint:sha-256 ${Array(32).fill(n).join(':')}\r\n`;
-  const code = await pairingCode(fp('AA'), fp('BB'));
-  assert.match(code, /^\d{4} \d{4}$/); assert.equal(code, await pairingCode(fp('AA'), fp('BB')));
-  assert.notEqual(code, await pairingCode(fp('AA'), fp('CC')));
+test('both devices derive the same 12-digit pairing number, bound to both certificates and both nonces', async () => {
+  const fp = n => `a=fingerprint:sha-256 ${Array(32).fill(n).join(':')}
+`, f = n => sdpFingerprint(fp(n)), n1 = '1'.repeat(32), n2 = '2'.repeat(32);
+  const code = await sasCode(f('AA'), f('BB'), n1, n2);
+  assert.match(code, /^\d{4} \d{4} \d{4}$/); assert.equal(code, await sasCode(f('AA'), f('BB'), n1, n2));
+  assert.notEqual(code, await sasCode(f('AA'), f('CC'), n1, n2)); assert.notEqual(code, await sasCode(f('AA'), f('BB'), n2, n1));
   assert.throws(() => sdpFingerprint(fp('AA') + fp('BB')));
 });

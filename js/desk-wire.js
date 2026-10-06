@@ -33,10 +33,12 @@ export function deskWire(channel, receive, failed = () => {}) {
     const result = queue.then(operation); queue = result.catch(() => {}); return result;
   } };
 }
-export function approvedDesk(channel, code, receive, ready, lost) {
+export function approvedDesk(channel, code, receive, ready, lost, windowMs = 60000) {
   let mine = false, theirs = false, authorized = false, dead = false;
-  const fail = () => { if (dead) return; dead = true; wire.stop(); channel.close(); lost(); };
-  const check = () => { if (!authorized && mine && theirs) { authorized = true; ready(); } };
+  // Both devices must approve within the window after the numbers appear; otherwise the session is invalidated.
+  const expiry = setTimeout(() => { if (!authorized) fail(); }, windowMs); expiry?.unref?.();
+  const fail = () => { if (dead) return; dead = true; clearTimeout(expiry); wire.stop(); channel.close(); lost(); };
+  const check = () => { if (!authorized && mine && theirs) { authorized = true; clearTimeout(expiry); ready(); } };
   const wire = deskWire(channel, async value => {
     if (!value || typeof value !== 'object') return fail();
     if (value.kind === 'approve') { if (value.code !== code) return fail(); theirs = true; check(); return; }

@@ -1,6 +1,7 @@
 // Offline cache (adapted from we go gim). Bump VERSION whenever app files change.
-const VERSION = 'tally-v79';
+const VERSION = 'tally-v80';
 const CORE = [
+  './js/book-sync/gates.mjs',   // the only sync file the off build loads; the rest of js/book-sync, css/book-*, sync-signal.html are cached on first use (network-first path below)
   './', './index.html', './privacy.html', './privacy.ms.html', './privacy.zh.html', './privacy.zh-Hant.html', './privacy.ja.html', './terms.html', './terms.ms.html', './terms.zh.html', './terms.zh-Hant.html', './terms.ja.html', './licences.html', './build.txt', './manifest.webmanifest', './css/app.css', './icons/icon.svg',
   './js/app.js', './js/state.js', './js/db.js', './js/engine.js', './js/cpi.js', './js/ui.js', './js/io.js', './js/i18n.js', './js/parse.js', './js/brands.js', './js/shops.js', './js/comic.js', './js/first.js', './js/native.js', './js/books/cast.js', './js/books/10.js', './js/books/11.js', './js/books/12.js',
   './js/receipt-image.js', './js/receipt-read.js', './js/desk-protocol.js', './js/desk-pair.js', './js/desk-wire.js', './js/desk-host.js', './js/desk-client.js', './css/desk.css', './connect.html', './img/website-preview.png', './js/align.js', './js/scan.js', './js/ocr-worker.js', './js/calendar.js', './js/mmimport.js', './js/money2time.js', './js/expenseiq.js', './js/expenseiq-compat.js', './js/statement.js', './js/presets.js', './js/feedback.js', './js/tour.js', './js/lock.js', './js/camera.js', './js/camcheck.js', './js/colorpicker.js', './js/learn.js', './js/gamify.js', './js/delight.js', './js/stickers.js', './js/features.js', './js/caticons.js', './js/sample.js', './js/share.js', './js/share-art.js', './js/sticker-export.js',
@@ -40,7 +41,10 @@ self.addEventListener('message', e => { if (e.data === 'skip') self.skipWaiting(
 const keyFor = url => url.origin + url.pathname;
 // Cross-origin isolation lets the receipt reader use several cores (SharedArrayBuffer). GitHub Pages can't send these
 // headers, so every answer from Tally's own site gets them here. credentialless: the feedback form's no-cors post still works.
-const iso = res => {
+// The sync-signal popup must carry the same COOP as the page that opened it, or the browser severs window.opener: it is isolated
+// (?iso=1, set by the opener only when crossOriginIsolated) or plain, never decided here by guessing.
+const iso = (res, req) => {
+  if (req && req.mode === 'navigate' && new URL(req.url).pathname.endsWith('/sync-signal.html') && new URL(req.url).searchParams.get('iso') !== '1') return res;
   if (!res || !res.status || res.type === 'opaqueredirect') return res;
   const h = new Headers(res.headers);
   h.set('Cross-Origin-Opener-Policy', 'same-origin'); h.set('Cross-Origin-Embedder-Policy', 'credentialless');
@@ -95,7 +99,7 @@ self.addEventListener('fetch', e => {
     return;
   }
   e.respondWith(new Promise(resolve => {
-    resolve = (done => r => done(iso(r)))(resolve);
+    resolve = (done => r => done(iso(r, req)))(resolve);
     let settled = false;
     const timer = shell ? setTimeout(() => { fromCache().then(r => { if (!settled && r) { settled = true; resolve(r); } }); }, 3000) : null;
     fetch(req, { cache: 'no-cache' }).then(res => {

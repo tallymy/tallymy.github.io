@@ -1,4 +1,4 @@
-import { phoneAddress, pairingCode, validSdp, gather } from './desk-pair.js';
+import { phoneAddress, sasHandshake, validSdp, gather } from './desk-pair.js';
 import { approvedDesk } from './desk-wire.js';
 import { literalT as t, setLang, pickLang } from './i18n.js';
 // This page never opens the app database and never writes expenses to browser storage.
@@ -39,10 +39,10 @@ async function connect(input, pin) {
       const opened = async () => {
         if (gen !== generation || link) return;
         try {
-          const code = await pairingCode(offer, activePeer.localDescription.sdp); if (gen !== generation) return;
+          const code = await sasHandshake(channel, { role: 'answer', offer, answer: activePeer.localDescription.sdp }); if (gen !== generation) return;
           clearTimeout(timer); timer = setTimeout(lost, 600000);
           link = approvedDesk(channel, code, receive, () => { connecting = false; root.querySelector('#wait').textContent = t('Opening your phone book…'); }, lost);
-          root.innerHTML = `<section class="card start"><h1>${esc(t('Do these numbers match the phone?'))}</h1><p class="code">${esc(code)}</p><p>${esc(t('Only tap Yes if both screens show the same numbers. If they differ, disconnect and start again.'))}</p><button id="approve">${esc(t('Yes, they match'))}</button><p id="wait" role="status"></p><button class="ghost" id="stop">${esc(t('Disconnect'))}</button></section>`;
+          root.innerHTML = `<section class="card start"><h1>${esc(t('Do these numbers match the phone?'))}</h1><p class="code" aria-label="${esc(code.replace(/\D/g, '').replace(/(\d)/g, '$1 '))}">${esc(code)}</p><p>${esc(t('Only tap Yes if both screens show the same 12 digits. You have 1 minute. If they differ, disconnect and start again.'))}</p><button id="approve">${esc(t('Yes, they match'))}</button><p id="wait" role="status"></p><button class="ghost" id="stop">${esc(t('Disconnect'))}</button></section>`;
           root.querySelector('#stop').onclick = () => { close(); home(); };
           root.querySelector('#approve').onclick = async event => { event.target.disabled = true; root.querySelector('#wait').textContent = t('Waiting for the phone to approve.'); try { await link.approve(); } catch { lost(); } };
         } catch { lost(); }

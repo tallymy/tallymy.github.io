@@ -280,7 +280,7 @@ details.items ul { list-style: none; padding: 0; margin: 6px 0; } details.items 
 .demo-a { color: var(--accent); transform: scaleX(-1); display: grid; place-items: center; }
 .demo-c { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: var(--fs-sm); }
 .demo-c li { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; background: var(--panel); border-radius: 10px; padding: 8px 10px; min-width: 0; }
-.demo-c .grow { white-space: nowrap; flex: 1 0 auto; }
+.demo-c .grow { white-space: nowrap; flex: 1 0 auto; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }   /* a long Tamil name is cut to its card, never pushes the page wider */
 .demo-c b { margin-left: auto; }
 .demo-c b { font: 500 var(--fs-xs)/1 var(--mono); white-space: nowrap; }
 [data-enter] .demo-c li, .welcome .demo-c li { animation: rise-in .5s var(--ease-out) both; } .demo-c li:nth-child(2) { animation-delay: .08s; } .demo-c li:nth-child(3) { animation-delay: .16s; }
@@ -791,6 +791,7 @@ a.srclink { display: inline-flex; align-items: center; min-height: 44px; }   /* 
 .card.month .spent { font-size: min(var(--fs-xl), 7vw); }   /* the month's figure shrinks before it pushes the page wider */
 .rowb:has(> .segs.mini) { flex-wrap: wrap; row-gap: var(--sp-2); }
 .row2 > .btn { min-width: 0; white-space: normal; text-align: center; }
+.btn { overflow-wrap: anywhere; }   /* one long unbreakable word (Tamil "கேலரியிலிருந்து") wraps inside its button instead of pushing the page wider */
 .tabs > .tab { min-width: 0; } .tabs > .tab span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .hero .big { font-size: min(var(--fs-2xl), 10.5vw); }   /* the balance stays on one line, inside the screen */
 .demo-r span { min-width: 0; } .demo-r span i:first-child { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .demo-r span i:last-child { flex: none; }   /* a long name gives way; the price always shows */

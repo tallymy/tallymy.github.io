@@ -310,9 +310,12 @@ export async function delMany(store, keys) {
  * writes {store: [objects]}.
  * One IndexedDB transaction, so a crash or full disk mid-way leaves the old data untouched.
  */
-export async function writeAtomic({ clear = [], del = {}, put = {}, expected = {}, expectedKeys = {}, beforeWrite = () => {} }) {
+export async function writeAtomic({ clear = [], del = {}, put = {}, expected = {}, expectedKeys = {}, beforeWrite = () => {}, snapshotGuard = null }) {
   alive();
-  const stores = [...new Set([...clear, ...Object.keys(del), ...Object.keys(put), ...Object.keys(expected), ...Object.keys(expectedKeys)])];
+  const snapshot = snapshotGuard ? syncSnapshots.get(snapshotGuard) : null;
+  if (snapshotGuard && (!idb || !snapshot || !sameSyncContext(snapshot.context))) throw Object.assign(new Error('Sync snapshot expired'), {code:'STALE'});
+  if (snapshotGuard) syncSnapshots.delete(snapshotGuard); // One attempt; cancellation or a stale plan needs a fresh preview.
+  const stores = [...new Set([...clear, ...Object.keys(del), ...Object.keys(put), ...Object.keys(expected), ...Object.keys(expectedKeys), ...(snapshot ? STORES : [])])];
   const stable = value => JSON.stringify(value, (_, v) => v instanceof ArrayBuffer ? Array.from(new Uint8Array(v)) : ArrayBuffer.isView(v) ? Array.from(new Uint8Array(v.buffer, v.byteOffset, v.byteLength)) : v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.keys(v).sort().map(k => [k, v[k]])) : v);
   const stale = () => Object.assign(new Error('The entry changed on your phone. Refresh and try again.'), { code: 'STALE' });
   const guards = [];
@@ -322,6 +325,10 @@ export async function writeAtomic({ clear = [], del = {}, put = {}, expected = {
     guards.push({ store, id, raw });
   }
   const keyGuards=Object.entries(expectedKeys).map(([store,keys])=>({store,keys:[...keys].sort()}));
+  if (snapshot) for (const store of STORES) {
+    keyGuards.push({store, keys:snapshot.raw[store].map(r=>store==='kv'?r.key:r.id).sort()});
+    for (const raw of snapshot.raw[store]) guards.push({store,id:store==='kv'?raw.key:raw.id,raw,blobHash:snapshot.hashes.get(raw),sync:true});
+  }
   if (!idb) {
     beforeWrite();
     if(keyGuards.some(g=>stable(Object.keys(mem[g.store]).sort())!==stable(g.keys)))throw stale();
@@ -341,8 +348,12 @@ export async function writeAtomic({ clear = [], del = {}, put = {}, expected = {
   if (anySealed && own && !wrapsMine(own)) throw new Error('Tally is locked');
   const check = anySealed && !own;
   await new Promise((resolve, reject) => {
-    let t, changed = false;
+    let t, changed = false, guardError = null;
     const write = () => {
+      if(snapshot){
+        try{alive();if(!sameSyncContext(snapshot.context))throw stale();beforeWrite();}
+        catch(error){guardError=error;t.abort();return;}
+      }
       for (const s of clear) t.objectStore(s).clear();
       for (const [s, keys] of Object.entries(del)) for (const k of keys) t.objectStore(s).delete(k);
       for (const [s, list] of Object.entries(sealedPut)) { const os = t.objectStore(s); for (const o of list) os.put(o); }
@@ -350,25 +361,112 @@ export async function writeAtomic({ clear = [], del = {}, put = {}, expected = {
     const checkedWrite = () => {
       if (!guards.length && !keyGuards.length) return write();
       let left = guards.length + keyGuards.length;
+      const photoChecks=[];let pulseRunning=false,hashing=false,hashResult=null;
+      const deadline=performance.now()+30000;
+      const pulse = () => {
+        if(changed||guardError)return;
+        try{
+          alive();if(snapshot&&!sameSyncContext(snapshot.context))throw stale();beforeWrite();
+          if(performance.now()>deadline)throw Object.assign(new Error('Photo verification timed out; reconnect and retry'),{code:'STALE'});
+          if(hashResult){
+            if(!hashResult.match){changed=true;t.abort();return;}
+            hashResult=null;hashing=false;if(--left===0){write();return;}
+          }
+          if(!hashing&&photoChecks.length){
+            const check=photoChecks.shift();hashing=true;
+            storedBlobHash(check.record).then(digest=>{hashResult={match:digest===check.hash};},()=>{hashResult={match:false};});
+          }
+          if(!hashing&&!photoChecks.length){pulseRunning=false;return;}
+          const request=t.objectStore('kv').get('__tally_sync_keepalive__');request.onsuccess=pulse;
+        }catch(error){guardError=error;try{t.abort();}catch{}}
+      };
       for(const g of keyGuards){const request=t.objectStore(g.store).getAllKeys();request.onsuccess=()=>{if(changed)return;if(stable(request.result.sort())!==stable(g.keys)){changed=true;t.abort();return;}if(--left===0)write();};}
       for (const g of guards) {
         const request = t.objectStore(g.store).get(g.id);
         request.onsuccess = () => {
           if (changed) return;
-          if (stable(request.result) !== stable(g.raw)) { changed = true; t.abort(); return; }
-          if (--left === 0) write();
+          if (g.sync ? !sameSyncRecord(request.result,g.raw,stable) : stable(request.result)!==stable(g.raw)) { changed = true; t.abort(); return; }
+          if (!g.blobHash) { if (--left === 0) write(); return; }
+          // Blob's JSON shape is empty. Compare its actual bytes while this transaction
+          // holds the write lock; a same-id, same-size photo replacement must be stale.
+          photoChecks.push({record:request.result,hash:g.blobHash});
+          if(!pulseRunning){pulseRunning=true;const request=t.objectStore('kv').get('__tally_sync_keepalive__');request.onsuccess=pulse;}
         };
       }
     };
     try {
       alive();   // the seal above can outlast an erase on this page
       beforeWrite();   // sheet cancellation may happen while encryption is awaited
+      if(snapshot&&!sameSyncContext(snapshot.context))throw stale();
       t = idb.transaction(check ? [...new Set([...stores, 'kv'])] : stores, 'readwrite');
       if (!check) checkedWrite();
       else { const g = t.objectStore('kv').get('settings'); g.onsuccess = () => { if (!wrapsMine(g.result)) { setKey(null); return t.abort(); } checkedWrite(); }; }
     } catch (e) { try { t?.abort(); } catch {} if(!e?.cancelled && e?.code!=='STALE')failHandler(e); return reject(e); } // abort: a half-written restore must not commit
     t.oncomplete = resolve;
-    t.onerror = t.onabort = () => { const e = changed ? stale() : t.error || new Error('Tally is locked'); if (!changed) failHandler(e); reject(e); };
+    t.onerror = t.onabort = () => { const e = guardError || (changed ? stale() : t.error || new Error('Tally is locked')); if (!changed && !e?.cancelled && e?.code!=='STALE') failHandler(e); reject(e); };
   });
   notify('all');
+}
+
+// Complete local snapshot for offline sync. Opaque guards never leave this device.
+// The ordinary localStorage fallback is intentionally ineligible for two-device commits.
+const syncSnapshots = new WeakMap();
+const syncContext = () => ({connection:idb,dek,dekFor,sealed,plainWrites});
+const sameSyncContext = c => c.connection===idb&&c.dek===dek&&c.dekFor===dekFor&&c.sealed===sealed&&c.plainWrites===plainWrites;
+function sameSyncRecord(a,b,stable) {
+  if(!a||!b)return a===b;
+  const buffer=value=>value instanceof ArrayBuffer?new Uint8Array(value):ArrayBuffer.isView(value)?new Uint8Array(value.buffer,value.byteOffset,value.byteLength):null;
+  for(const key of ['iv','ct']){
+    const x=buffer(a[key]),y=buffer(b[key]);if(!!x!==!!y)return false;
+    if(x){if(x.length!==y.length)return false;for(let i=0;i<x.length;i++)if(x[i]!==y[i])return false;}
+  }
+  if(a.blob instanceof Blob||b.blob instanceof Blob){
+    if(!(a.blob instanceof Blob)||!(b.blob instanceof Blob)||a.blob.size!==b.blob.size||a.blob.type!==b.blob.type)return false;
+  }
+  const strip=record=>Object.fromEntries(Object.entries(record).filter(([key])=>!['iv','ct','blob'].includes(key)));
+  return stable(strip(a))===stable(strip(b));
+}
+function boundSyncRecord(store,record,usage) {
+  const limits={accounts:200,tx:200000,recurring:500,receipts:200000,kv:10000};
+  if(++usage.counts[store]>limits[store])throw Object.assign(new Error('Book exceeds sync record limits'),{code:'BOUNDS'});
+  if(record.blob instanceof Blob){if(record.blob.size>40*1024*1024)throw Object.assign(new Error('Receipt exceeds sync limit'),{code:'BOUNDS'});usage.photos+=record.blob.size;}
+  if(record.ct instanceof ArrayBuffer){if(store==='receipts'){if(record.ct.byteLength>40*1024*1024+65536)throw Object.assign(new Error('Receipt exceeds sync limit'),{code:'BOUNDS'});usage.photos+=record.ct.byteLength;}else usage.metadata+=record.ct.byteLength;}
+  else usage.metadata+=new TextEncoder().encode(JSON.stringify(Object.fromEntries(Object.entries(record).filter(([key])=>key!=='blob')))).byteLength;
+  if(usage.metadata>64*1024*1024||usage.photos>200*1024*1024)throw Object.assign(new Error('Book exceeds sync safety limits'),{code:'BOUNDS'});
+}
+async function storedBlobHash(record) {
+  if (!(record?.blob instanceof Blob)) return null;
+  const digest=await crypto.subtle.digest('SHA-256',await record.blob.arrayBuffer());
+  return [...new Uint8Array(digest)].map(x=>x.toString(16).padStart(2,'0')).join('');
+}
+export async function captureAtomicSnapshot() {
+  alive();
+  if(!idb)throw Object.assign(new Error('Sync requires the app database'),{code:'UNSUPPORTED'});
+  const context=syncContext();
+  const raw=await new Promise((resolve,reject)=>{
+    let transaction, result={},failure=null;
+    const usage={counts:Object.fromEntries(STORES.map(s=>[s,0])),metadata:0,photos:0};
+    try{
+      transaction=idb.transaction(STORES,'readonly');
+      for(const store of STORES){
+        result[store]=[];const request=transaction.objectStore(store).openCursor();
+        request.onsuccess=()=>{
+          if(failure)return;const cursor=request.result;if(!cursor)return;
+          try{boundSyncRecord(store,cursor.value,usage);result[store].push(cursor.value);cursor.continue();}
+          catch(error){failure=error;transaction.abort();}
+        };
+      }
+    }catch(error){try{transaction?.abort();}catch{}reject(error);return;}
+    transaction.oncomplete=()=>resolve(result);
+    transaction.onerror=transaction.onabort=()=>reject(failure||transaction.error||new Error('Snapshot interrupted'));
+  });
+  const hashes=new Map(), records={};
+  for(const store of STORES){
+    records[store]=[];
+    for(const record of raw[store]){const digest=await storedBlobHash(record);if(digest)hashes.set(record,digest);records[store].push(structuredClone(await unseal(record)));}
+  }
+  alive();
+  if(!sameSyncContext(context))throw Object.assign(new Error('Tally lock changed during snapshot'),{code:'STALE'});
+  const guard={};syncSnapshots.set(guard,{raw,hashes,context});
+  return {records,guard};
 }

@@ -1,6 +1,14 @@
 // App shell: boot, hash routing, bottom nav, one delegated click/input handler, recovery screen on errors.
 import { S, load, locked, settings, setSetting, onRemoteChange, onSaveFailed, storageMode, persistStorage, sweepPhotos, dropPhotos, today, repairCatNames, OLD_HOME, NEW_HOME, wipeSite } from './state.js';
 import { gate, watch, sealPhotos } from './lock.js';
+// Sync code and its CSS load only when both source gates are on; with them off (as shipped) nothing else is fetched.
+export let syncEntry = null;   // the book-sync entry module, or null while sync is off (views read this live binding)
+const loadSync = async () => {
+  const g = await import('./book-sync/gates.mjs');
+  if (g.mainHostApproved() !== true || g.localRecoveryApproved() !== true) return null;
+  for (const f of ['book-sync', 'book-sync-context', 'book-safety']) document.head.appendChild(Object.assign(document.createElement('link'), { rel: 'stylesheet', href: `css/${f}.css` }));
+  return syncEntry = await import('./book-sync/entry.mjs');
+};
 import { t, setLang, pickLang } from './i18n.js';
 import { $, esc, ICON, toast, closeSheet, sheetOpen, own , settling } from './ui.js';
 import * as home from './views/home.js';
@@ -20,7 +28,7 @@ window.addEventListener('tally:scan-shortcut', () => {
 
 applySavedLook();   // theme and accent before anything is drawn (the database copy is applied on every render)
 
-export const APP_VERSION = '1.13.12';
+export const APP_VERSION = '1.13.13';
 export const MAKER = 'fir1412', CONTACT = 'fir1412dev@gmail.com';   // the developer, and the data user for feedback (privacy pages)
 // Checking a receipt and Settings (with Welcome and imports) load the first time they are needed, not before Home
 // shows. sw.js still caches them for offline use.
@@ -206,9 +214,11 @@ export const refresh = () => { if (!sheetOpen()) render(); };
     await syncReminderDay();   // selected/default language is now available
     await gate();   // app lock: nothing is shown before the PIN
     if (settings().lock?.enc) { await load(); sealPhotos().catch(() => {}); }   // encrypted: the data could only be read once the PIN unlocked its key
+    const mainHostReady = (await loadSync())?.bindMainBookHostReady(render);
+    await mainHostReady?.ready();   // actual PIN gate and encrypted cache reload have completed; source gates remain false
     await repairCatNames().catch(() => {});   // "&#x1f35c; Food" from an older import: folded into Food
-    onRemoteChange(async s => { if (s === 'erased') return location.reload();   // erased in another tab: nothing here may write the old data back
-      await load(); if (locked()) { await gate(); await load(); } refresh(); });   // encrypted or re-keyed in another tab: ask here too
+    onRemoteChange(async s => { syncEntry?.invalidateMainBookHost('REMOTE_CHANGE'); if (s === 'erased') return location.reload();   // erased in another tab: nothing here may write the old data back
+      await load(); if (locked()) { await gate(); await load(); } refresh(); await mainHostReady?.ready().catch(() => {}); });   // encrypted or re-keyed in another tab: ask here too
     setTimeout(() => sweepPhotos().catch(() => {}), 8000);   // photos of entries deleted before this start (after their Undo was over)
     // Photos kept only for a while (Settings → Privacy): older ones go, their entries stay. The day count is from today's date.
     if (settings().photoKeep > 0) setTimeout(() => { const d = new Date(`${today()}T00:00:00Z`); d.setUTCDate(d.getUTCDate() - settings().photoKeep); dropPhotos(d.toISOString().slice(0, 10)).catch(() => {}); }, 9000);
@@ -222,7 +232,7 @@ export const refresh = () => { if (!sheetOpen()) render(); };
     if (resumed === 'waiting') toast(t('A receipt is waiting for the reader. Open Scan when you are on Wi-Fi.'));
     else if (resumed) { history.replaceState(null, '', '#/review'); toast(resumed === 'items' ? t('Picked up the items you were adding') : t('Picked up the receipt you were checking')); }
     await money.postBills().catch(console.error);   // bills that add themselves, up to today
-    watch(async () => { if (await money.postBills().catch(() => 0)) refresh(); await syncReminderDay(); });
+    watch(async () => { if (await money.postBills().catch(() => 0)) refresh(); await syncReminderDay(); await mainHostReady?.ready().catch(() => {}); });
     if (S.accounts.length) persistStorage().then(() => route() === 'settings' && refresh());
     if (isNative) setInterval(() => { if (document.visibilityState === 'visible') syncReminderDay().catch(() => {}); }, 60_000);   // midnight/clock changes while open
     entering(); render();   // opening the app plays the same entrance as a screen change (the month ring fills)

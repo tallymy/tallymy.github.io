@@ -87,7 +87,7 @@ test('settings select saves preference, resets automatic, and recovers failed st
 test('backup carries valid preference and rejects malformed identifiers', () => {
   const io = read('js/io.js');
   const start = io.indexOf('const SETTINGS = {'), end = io.indexOf('/** The receipt photos an import may write:', start);
-  const c = vm.createContext({ okId: id => typeof id === 'string' && /^[\w-]{1,60}$/.test(id) && !['constructor', '__proto__', 'prototype'].includes(id), isObj: x => x && typeof x === 'object' && !Array.isArray(x), cleanText: x => x });
+  const c = vm.createContext({ okId: id => typeof id === 'string' && /^[\w-]{1,60}$/.test(id) && !['constructor', '__proto__', 'prototype'].includes(id), isObj: x => x && typeof x === 'object' && !Array.isArray(x), cleanText: x => x, validFriends: v => Array.isArray(v) });
   vm.runInContext(io.slice(start, end).replace('export const backupSettings', 'this.backupSettings'), c);
   const saved = c.backupSettings({ quickAccount: 'bank', lock: { pin: 'secret' } });
   assert.equal(saved.quickAccount, 'bank'); assert.equal(saved.lock, undefined);
