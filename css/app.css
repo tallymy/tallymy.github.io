@@ -1039,3 +1039,34 @@ select option { background: var(--panel, var(--bg)); color: var(--ink); }
 .learnlist li .grow { flex: 1 1 12ch; min-width: 0; }
 @media (max-width: 360px) { .tab { min-width: 0; padding-inline: 2px; font-size: .6875rem; } }
 .chips[hidden] { display: none; }
+
+/* Picker sheets (js/pickers.js): dropdown option list and calendar. */
+.pick { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.pick-group { padding: var(--sp-3) var(--sp-3) var(--sp-1); font-size: var(--fs-xs); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--mute); }
+.pick-opt { display: flex; align-items: center; gap: var(--sp-3); width: 100%; min-height: 48px; padding: var(--sp-2) var(--sp-3); border: 0; border-radius: 12px; background: none; color: var(--ink); font-size: var(--fs-md); text-align: start; cursor: pointer; }
+.pick-opt .grow { min-width: 0; overflow-wrap: anywhere; }
+.pick-opt svg { flex: none; color: var(--accent); }
+.pick-opt.blank { color: var(--mute); }
+.pick-opt[aria-selected="true"] { background: color-mix(in srgb, var(--accent) 14%, var(--panel2)); font-weight: 600; }
+.pick-opt:active:not(:disabled) { background: var(--panel2); }
+.pick-opt:disabled { opacity: .4; cursor: not-allowed; }
+.pick-opt:focus-visible, .dp button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.dp-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); margin-bottom: var(--sp-2); }
+.dp-head .icon-btn:disabled { opacity: .3; }
+.dp-head .flip { display: inline-flex; }
+.dp-title { display: inline-flex; align-items: center; gap: var(--sp-1); min-height: 44px; padding: 0 var(--sp-3); border: 0; border-radius: 99px; background: none; color: var(--ink); font: inherit; font-weight: 700; cursor: pointer; }
+.dp-caret { display: inline-flex; width: 16px; color: var(--mute); }
+.dp-week, .dp-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; text-align: center; }
+.dp-week span { padding: var(--sp-1) 0; font-size: var(--fs-xs); font-weight: 600; color: var(--mute); }
+.dp-day { aspect-ratio: 1; min-height: 40px; border: 1px solid transparent; border-radius: 50%; background: none; color: var(--ink); font: inherit; font-variant-numeric: tabular-nums; cursor: pointer; }
+.dp-day.now { border-color: var(--accent); }
+.dp-day.on { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+.dp-day:disabled { opacity: .3; cursor: not-allowed; }
+.dp-day:active:not(:disabled):not(.on) { background: var(--panel2); }
+.dp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-2); }
+.dp-grid.years { max-height: 46vh; overflow-y: auto; }
+.dp-cell { min-height: 48px; border: 1px solid transparent; border-radius: 12px; background: var(--panel2); color: var(--ink); font: inherit; cursor: pointer; }
+.dp-cell.on { background: var(--accent); color: #fff; font-weight: 700; }
+.dp-cell:disabled { opacity: .3; cursor: not-allowed; }
+.dp-foot { display: flex; justify-content: space-between; margin-top: var(--sp-3); }
+@media (prefers-reduced-motion: no-preference) { .pick-opt, .dp-day, .dp-cell { transition: background-color .12s; } }

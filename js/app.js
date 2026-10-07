@@ -18,6 +18,7 @@ import { flushFeedback } from './feedback.js';
 import { onboarding, registerSW } from './tour.js';
 import { startScan } from './camera.js';
 import { applyLook, applySavedLook } from './colorpicker.js';
+import './pickers.js';   // dropdowns and date fields open as bottom sheets
 import { on } from './features.js';
 import { sharedFiles, onShared, isNative } from './native.js';
 import { syncReminderDay } from './state.js';

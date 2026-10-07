@@ -94,7 +94,7 @@ function goalSheet(g = {}) {
       <small>${esc(t("Progress is this account's balance. Money you put into it fills the bar."))}</small></label>
     <button type="button" class="btn ghost wide" data-x="newacc">${ICON.plus}${esc(t('Create a savings account'))}</button>
     <div class="grid2 keep2"><label class="field"><span>${esc(t('Target (RM)'))}</span><input id="g-amt" inputmode="decimal" autocomplete="off" aria-describedby="g-err" value="${g.target ? (g.target / 100).toFixed(2) : ''}" placeholder="0.00"></label>
-    <label class="field"><span>${esc(t('By (optional)'))}</span><input id="g-by" type="date" min="1990-01-01" value="${esc(g.by || '')}"></label></div>
+    <label class="field"><span>${esc(t('By (optional)'))}</span><input id="g-by" data-optional type="date" min="1990-01-01" value="${esc(g.by || '')}"></label></div>
     <p class="err" id="g-err" role="alert"></p>
     <div class="row2">${g.id ? `<button class="btn ghost danger" data-x="del">${esc(t('Delete'))}</button>` : `<button class="btn ghost" data-act="sheet-close">${esc(t('Cancel'))}</button>`}<button class="btn" data-x="save">${esc(t('Save'))}</button></div>`, { label: t('Savings goals'), onClose: () => stop() });
   // A savings account made from here opens over this sheet (what was typed stays) and comes back picked.
