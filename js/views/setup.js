@@ -218,6 +218,7 @@ let findQ = '', hits = [];
 const findables = () => $$('#view .card').flatMap(card => {
   const title = card.querySelector('h2, summary .lbl')?.textContent.trim() || '', seen = new Set();
   return [[title, card], ...$$('label.toggle b, label.field > span, .rowb b, .lookrow > span, summary, .btn, .segs, .segs [aria-label]', card).map(el => [(el.matches('.segs, .segs *') && el.getAttribute('aria-label')) || el.textContent.trim(), el])]
+    .concat(card.querySelector('[data-act="lock-set"]') ? [[t('PIN or password'), card]] : [])
     .filter(([s]) => s && !seen.has(s) && seen.add(s)).map(([s, el]) => ({ s, el, card: title }));
 });
 function findSettings() {
@@ -299,7 +300,7 @@ export const settingsView = {
       ${lookCard()}
       <section class="card"><h2>${esc(t('Budget month'))}</h2>
         <label class="field"><span>${esc(t('My month starts on day'))}</span><select data-input="month-start">${[...Array.from({ length: 28 }, (_, i) => [i + 1, String(i + 1)]), [-2, t('Second-last day')], [-1, t('Last day')]].map(([v, l]) => `<option value="${v}"${startDay() === v ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
-        <p class="fine">${esc(t('Paid on the 25th? Start your month on payday. Home, Budgets and Insights follow it.'))} ${esc(t('This month: {0}', fmtMonth(thisMonth(), startDay())))}</p></section>
+        <p class="fine">${esc(t('Paid on the 25th? Start your month on payday. Your monthly totals follow it.'))} ${esc(t('This month: {0}', fmtMonth(thisMonth(), startDay())))}</p></section>
       <section class="card" id="s-accounts"><h2>${esc(t('Accounts'))}</h2><ul class="list">${S.accounts.filter(a => !owing(a)).map(a => `<li><button class="txrow" data-act="acc-edit" data-id="${esc(a.id)}"><span class="grow"><b>${esc(a.name)}</b><small>${esc(accSub(a, bal))}</small></span><span class="fine">${esc(t('Edit'))}</span></button></li>`).join('')}</ul>
         <button class="btn ghost wide" data-act="acc-edit">${ICON.plus}${esc(t('Add an account'))}</button>${goalsSettings()}
         <label class="field"><span>${esc(t('Default account for typed expenses'))}</span><select data-input="quick-account"><option value="">${esc(t('Choose automatically'))}</option>${S.accounts.filter(a => !owing(a)).map(a => `<option value="${esc(a.id)}"${settings().quickAccount === a.id ? ' selected' : ''}>${esc(a.name)} (${esc(a.currency || 'MYR')})</option>`).join('')}</select></label>

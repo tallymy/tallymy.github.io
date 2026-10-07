@@ -3,7 +3,7 @@
 import { S, today, booked, setKv, uid, scopedAccounts, defaultAccount, bookGeneration } from '../state.js';
 import { t, fmtMonth } from '../i18n.js';
 import { esc, ICON, MASK, balHidden, openSheet, closeSheet, confirmSheet, toast } from '../ui.js';
-import { balances, goalProgress, calcAmount, validIso, fmtAcct, owing } from '../engine.js';
+import { balances, goalProgress, calcAmount, tooLarge, validIso, fmtAcct, owing } from '../engine.js';
 import { cleanText } from '../io.js';
 import { on } from '../features.js';
 import { shareSheet } from '../share.js';
@@ -111,7 +111,7 @@ function goalSheet(g = {}) {
     const err = m => { el.querySelector('#g-err').textContent = m; };
     err('');
     if (!name) return err(t('Give the goal a name.'));
-    if (!(target > 0)) return err(t('Enter an amount, for example 12.50.'));
+    if (!(target > 0)) return err(tooLarge(el.querySelector('#g-amt').value) ? t('That amount is too large (RM 100 million at most).') : t('Enter an amount, for example 12.50.'));
     if (by && !validIso(by)) return err(t('Pick a date.'));
     if (!g.id && goals().length >= 20) return err(t('20 goals is the most Tally keeps.'));   // what a backup restores
     // Not blocking: the goal can be saved as it is. Asked for a new goal or a changed account, not on every later edit.

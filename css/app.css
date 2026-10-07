@@ -1030,3 +1030,8 @@ input[type=date]::-webkit-date-and-time-value { text-align: start; }
 select:focus-visible, input[type=date]:focus-visible { border-color: var(--accent); outline: 2px solid var(--accent); outline-offset: 1px; }
 select option { background: var(--panel, var(--bg)); color: var(--ink); }
 @media (prefers-reduced-motion: no-preference) { select, input[type=date] { transition: border-color .15s, box-shadow .15s; } }
+
+/* Narrow screens with big text: a mission's words keep a readable column (the button wraps under them), and the tab labels stay apart. */
+.learnlist li { flex-wrap: wrap; }
+.learnlist li .grow { flex: 1 1 12ch; min-width: 0; }
+@media (max-width: 360px) { .tab { min-width: 0; padding-inline: 2px; font-size: .6875rem; } }
