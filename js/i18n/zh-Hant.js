@@ -2233,5 +2233,8 @@ export default {
   "Connection stopped. Start again to connect.": "連線已停止。請重新開始以連線。",
   "The other device's bill dates look wrong. Check its date and try again": "另一台裝置上的帳單日期看起來不對。請檢查它的日期後再試。",
   "Sync this book keeps one book on your phone and your computer over your own Wi-Fi, with no account and no cloud": "同步帳本：透過你自己的 Wi-Fi，在手機和電腦上保持同一份帳本，不需帳號，也沒有雲端",
+  "Dropdowns and dates open as roomy pickers, and Shop or note suggests earlier names right under the box": "下拉選單和日期改以寬敞的選擇器開啟，「商店或備註」下方會顯示先前的名稱建議",
+  "Fixed the Date box looking squashed next to Time on some phones": "修正部分手機上日期欄在時間欄旁看起來被壓扁的問題",
+  "Fixed a refund bigger than its purchase being accepted, and a new bill starting on the 1st of next month": "修正超過購買金額的退款被接受，以及新帳單從下個月 1 號開始的問題",
   "Fixed text running wider than the screen on small phones with large text, mainly in Tamil": "修正：在小螢幕手機使用大字體（主要是坦米爾語）時文字超出螢幕寬度的問題",
 };

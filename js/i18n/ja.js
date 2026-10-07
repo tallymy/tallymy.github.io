@@ -2232,5 +2232,8 @@ export default {
   "Connection stopped. Start again to connect.": "接続が停止しました。もう一度開始して接続してください。",
   "The other device's bill dates look wrong. Check its date and try again": "相手の端末の請求日がおかしいようです。端末の日付を確認して、もう一度お試しください。",
   "Sync this book keeps one book on your phone and your computer over your own Wi-Fi, with no account and no cloud": "帳簿の同期：自分の Wi-Fi で、スマートフォンとパソコンの帳簿を同じ状態に保てます。アカウントもクラウドも不要です",
+  "Dropdowns and dates open as roomy pickers, and Shop or note suggests earlier names right under the box": "ドロップダウンと日付は選びやすいピッカーで開き、「店またはメモ」の下に過去の名前が候補として出ます",
+  "Fixed the Date box looking squashed next to Time on some phones": "一部のスマホで日付欄が時刻欄の横でつぶれて見える問題を修正しました",
+  "Fixed a refund bigger than its purchase being accepted, and a new bill starting on the 1st of next month": "購入額を超える返金が受け付けられる問題と、新しい請求の開始日が翌月1日になる問題を修正しました",
   "Fixed text running wider than the screen on small phones with large text, mainly in Tamil": "修正：小さな画面で大きな文字（主にタミル語）にしたとき、文字が画面の幅からはみ出す問題",
 };

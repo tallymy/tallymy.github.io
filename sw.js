@@ -1,5 +1,5 @@
 // Offline cache (adapted from we go gim). Bump VERSION whenever app files change.
-const VERSION = 'tally-v80';
+const VERSION = 'tally-v81';
 const CORE = [
   './js/book-sync/gates.mjs',   // the only sync file the off build loads; the rest of js/book-sync, css/book-*, sync-signal.html are cached on first use (network-first path below)
   './', './index.html', './privacy.html', './privacy.ms.html', './privacy.zh.html', './privacy.zh-Hant.html', './privacy.ja.html', './terms.html', './terms.ms.html', './terms.zh.html', './terms.zh-Hant.html', './terms.ja.html', './licences.html', './build.txt', './manifest.webmanifest', './css/app.css', './icons/icon.svg',

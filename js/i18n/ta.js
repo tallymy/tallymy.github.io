@@ -2232,5 +2232,8 @@ export default {
   "Connection stopped. Start again to connect.": "இணைப்பு நிறுத்தப்பட்டது. இணைக்க மீண்டும் தொடங்கவும்.",
   "The other device's bill dates look wrong. Check its date and try again": "மற்ற சாதனத்தில் உள்ள பில் தேதிகள் தவறாகத் தெரிகின்றன. அதன் தேதியைச் சரிபார்த்து மீண்டும் முயலவும்.",
   "Sync this book keeps one book on your phone and your computer over your own Wi-Fi, with no account and no cloud": "புத்தக ஒத்திசைவு: உங்கள் சொந்த Wi-Fi வழியாக தொலைபேசியிலும் கணினியிலும் ஒரே புத்தகத்தை வைத்திருக்கலாம்; கணக்கு தேவையில்லை, மேகமும் இல்லை",
+  "Dropdowns and dates open as roomy pickers, and Shop or note suggests earlier names right under the box": "கீழிறங்கு பட்டியல்களும் தேதிகளும் விசாலமான தேர்வுப் பெட்டிகளாகத் திறக்கும்; ‘கடை அல்லது குறிப்பு’ பெட்டியின் கீழே முந்தைய பெயர்கள் பரிந்துரைக்கப்படும்",
+  "Fixed the Date box looking squashed next to Time on some phones": "சில தொலைபேசிகளில் நேரப் பெட்டியின் அருகில் தேதிப் பெட்டி நசுங்கித் தெரிந்ததைச் சரிசெய்தோம்",
+  "Fixed a refund bigger than its purchase being accepted, and a new bill starting on the 1st of next month": "கொள்முதலை விட அதிகமான பணத்திரும்பப் பெறுதல் ஏற்கப்படுவதையும், புதிய கட்டணம் அடுத்த மாதம் 1-ஆம் தேதி தொடங்குவதையும் சரிசெய்தோம்",
   "Fixed text running wider than the screen on small phones with large text, mainly in Tamil": "சரிசெய்யப்பட்டது: சிறிய தொலைபேசிகளில் பெரிய எழுத்துடன் (முக்கியமாக தமிழ்) உரை திரையின் அகலத்தை மீறுவது",
 };

@@ -7,6 +7,11 @@ import { isNative } from './native.js';
 
 // Newest first. Written for users; each line is translated.
 export const WHATS_NEW = {
+  '1.13.14': [
+    'Dropdowns and dates open as roomy pickers, and Shop or note suggests earlier names right under the box',
+    'Fixed the Date box looking squashed next to Time on some phones',
+    'Fixed a refund bigger than its purchase being accepted, and a new bill starting on the 1st of next month',
+  ],
   '1.13.13': [
     'Sync this book keeps one book on your phone and your computer over your own Wi-Fi, with no account and no cloud',
     'Fixed text running wider than the screen on small phones with large text, mainly in Tamil',

@@ -2232,5 +2232,8 @@ export default {
   "Connection stopped. Start again to connect.": "连接已停止。请重新开始以连接。",
   "The other device's bill dates look wrong. Check its date and try again": "另一台设备上的账单日期看起来不对。请检查它的日期后再试。",
   "Sync this book keeps one book on your phone and your computer over your own Wi-Fi, with no account and no cloud": "同步账本：通过你自己的 Wi-Fi，在手机和电脑上保持同一份账本，无需账号，也没有云端",
+  "Dropdowns and dates open as roomy pickers, and Shop or note suggests earlier names right under the box": "下拉菜单和日期改以宽敞的选择器打开，“商店或备注”下方会显示之前的名称建议",
+  "Fixed the Date box looking squashed next to Time on some phones": "修复部分手机上日期栏在时间栏旁看起来被压扁的问题",
+  "Fixed a refund bigger than its purchase being accepted, and a new bill starting on the 1st of next month": "修复超过购买金额的退款被接受，以及新账单从下个月 1 号开始的问题",
   "Fixed text running wider than the screen on small phones with large text, mainly in Tamil": "修复：在小屏手机上使用大字体（主要是泰米尔语）时文字超出屏幕宽度的问题",
 };

@@ -2232,5 +2232,8 @@ export default {
   "Connection stopped. Start again to connect.": "Sambungan dihentikan. Mulakan semula untuk menyambung.",
   "The other device's bill dates look wrong. Check its date and try again": "Tarikh bil pada peranti lain kelihatan salah. Semak tarikhnya dan cuba lagi.",
   "Sync this book keeps one book on your phone and your computer over your own Wi-Fi, with no account and no cloud": "Segerak buku mengekalkan satu buku pada telefon dan komputer anda melalui Wi-Fi anda sendiri, tanpa akaun dan tanpa awan",
+  "Dropdowns and dates open as roomy pickers, and Shop or note suggests earlier names right under the box": "Senarai juntai dan tarikh dibuka sebagai pemilih yang luas, dan Kedai atau nota mencadangkan nama terdahulu di bawah kotak",
+  "Fixed the Date box looking squashed next to Time on some phones": "Membetulkan kotak Tarikh yang kelihatan senget di sebelah Masa pada sesetengah telefon",
+  "Fixed a refund bigger than its purchase being accepted, and a new bill starting on the 1st of next month": "Membetulkan bayaran balik yang melebihi pembelian diterima, dan bil baharu yang bermula pada 1 haribulan depan",
   "Fixed text running wider than the screen on small phones with large text, mainly in Tamil": "Dibetulkan: teks yang melebihi lebar skrin pada telefon kecil dengan teks besar, terutamanya dalam Tamil",
 };
