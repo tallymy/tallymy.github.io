@@ -87,7 +87,7 @@ export function render() {
   if ((r === 'add' || r === 'scan') && S.accounts.length) { const act = r === 'add' ? 'tx-new' : on('receipts') ? 'scan' : 'tx-new'; history.replaceState(history.state, '', '#/home'); r = 'home'; setTimeout(() => own(ACT, act)?.({ dataset: {} }), 0); }
   if (!own(VIEWS, r)) r = 'home';   // unknown routes (#/constructor too) show Home
   if (!S.accounts.length && !['welcome', 'settings'].includes(r)) { r = 'welcome'; history.replaceState(null, '', '#/welcome'); }
-  if ((r === 'insights' && !on('insights')) || (r === 'budgets' && !on('budgets') && !on('bills'))) { r = 'home'; history.replaceState(history.state, '', '#/home'); }   // a module that is off
+  if ((r === 'insights' && !on('insights')) || (r === 'learn' && !on('learn')) || (r === 'budgets' && !on('budgets') && !on('bills'))) { r = 'home'; history.replaceState(history.state, '', '#/home'); }   // a module that is off
   const view = VIEWS[r]();
   applyLook(settings());
   const tabs = [['home', ICON.home, t('Home')], ['activity', ICON.list, t('Activity')], on('insights') && ['insights', ICON.chart, t('Insights')], (on('budgets') || on('bills')) && ['budgets', ICON.wallet, t(on('budgets') ? 'Budgets' : 'Bills')]].filter(Boolean);
@@ -150,7 +150,7 @@ window.addEventListener('hashchange', () => {
   entering();
   const run = () => { render(); window.scrollTo(0, y); };
   transition?.skipTransition?.();
-  if (document.startViewTransition && !busy && !matchMedia('(prefers-reduced-motion: reduce)').matches) { transition = document.startViewTransition(run); transition.finished.finally(() => { transition = null; }); } else run();
+  if (document.startViewTransition && !busy && !matchMedia('(prefers-reduced-motion: reduce)').matches) { transition = document.startViewTransition(run); transition.finished.catch(() => {}).finally(() => { transition = null; }); } else run();
 });
 
 // Global actions used by every view.

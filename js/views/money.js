@@ -104,6 +104,7 @@ export const input = {
   'act-q': el => { F.q = el.value; clearTimeout(qTimer); qTimer = setTimeout(() => { const pos = el.selectionStart; refilter(); const q = $('#act-q'); q.focus(); q.setSelectionRange(pos, pos); }, 250); },
   // Typing a name picks the category it had before (until one is tapped): "Grab to office" → Transport.
   'tx-name': el => {
+    suggest(el);
     // The account this shop was paid from before (a toll on TNG), unless one was picked by hand.
     if (draft && !accPicked && draft.type !== 'transfer' && S.tx.length) { const id = defaultAccount(draft.type === 'income' ? 'income' : 'quick', { shop: el.value, amount: draft.amount || 0, typedExpense: draft.type === 'expense' }), sel = $('#tx-acc'); if (id && sel && sel.value !== id) { sel.value = id; draft.accountId = id; } }
     if (!draft || catPicked || draft.type === 'transfer' || draft.items?.length) return;
@@ -208,8 +209,8 @@ function sheetHtml() {
     </div>
     ${twoCur ? `<label class="field"><span>${esc(amtLabel(to, 'Received ({0})'))}</span><input id="tx-toamt" inputmode="decimal" autocomplete="off" value="${d.toAmount ? (d.toAmount / 100).toFixed(2) : ''}" placeholder="0.00"><small>${esc(t('What arrived, after the exchange. Tally uses it as the rate for this currency.'))}</small></label>` : ''}
     ${day ? '' : when}
-    <label class="field"><span>${esc(d.type === 'income' ? t('From (who paid you)') : t('Shop or note'))}</span><input id="tx-merchant" maxlength="80" value="${esc(d.merchant || '')}" autocomplete="off" list="tx-names" data-input="tx-name"></label>
-    <datalist id="tx-names">${pastNames(d.type).map(n => `<option value="${esc(n)}">`).join('')}</datalist>
+    <label class="field"><span>${esc(d.type === 'income' ? t('From (who paid you)') : t('Shop or note'))}</span><input id="tx-merchant" maxlength="80" value="${esc(d.merchant || '')}" autocomplete="off" data-input="tx-name"></label>
+    <div class="chips" id="tx-sugg" aria-label="${esc(t('Earlier names'))}" hidden></div>
     ${d.items?.length ? `<details class="items"><summary>${esc(d.receiptId ? (d.items.length === 1 ? t('1 item from the receipt') : t('{0} items from the receipt', d.items.length)) : d.items.length === 1 ? t('1 item') : t('{0} items', d.items.length))}</summary><ul>${d.items.map(i => `<li>${dot(i.category)}<span class="grow">${esc(i.name || t('(no name)'))}</span><span class="amt">${esc(fmtRM(i.cents))}</span></li>`).join('')}</ul>
       <button class="btn ghost small" data-act="tx-items">${esc(t('Edit items'))}</button></details>` : ''}
     ${refundsOf(d)}
@@ -221,6 +222,14 @@ function sheetHtml() {
     <div class="row2 sheetfoot">${isNew ? `<button class="btn ghost" data-act="sheet-close">${esc(t('Cancel'))}</button>` : `<button class="btn ghost danger" data-act="tx-del">${ICON.trash}${esc(t('Delete'))}</button>`}<button class="btn" data-act="tx-save">${esc(t('Save'))}</button></div>`;
 }
 /** Shop and note names typed before (imports too), most used first, for the name field's suggestions. */
+// In-page suggestions instead of a native <datalist>: its popup swallowed taps meant for typing and Back closed the whole sheet.
+const suggest = el => {
+  const box = $('#tx-sugg'), q = el.value.trim().toLowerCase();
+  if (!box) return;
+  const hits = q ? pastNames(draft?.type).filter(n => n.toLowerCase().includes(q) && n.toLowerCase() !== q).slice(0, 4) : [];
+  box.innerHTML = hits.map(n => `<button type="button" class="chip" data-act="tx-pickname" data-n="${esc(n)}">${esc(n)}</button>`).join('');
+  box.hidden = !hits.length;
+};
 const pastNames = type => { const n = new Map(); for (const x of S.tx) if (x.type === type && x.merchant) n.set(x.merchant, (n.get(x.merchant) || 0) + 1); return [...n].sort((a, b) => b[1] - a[1]).slice(0, 300).map(([k]) => k); };
 /**
  * The category a name was filed under before: a remembered rule first, then the category most used with the same name
@@ -358,7 +367,7 @@ const billLine = (b, s) => [fmtRM(b.amount), b.freq === 'weekly' ? t('every week
   s.date && !s.paid && s.days <= 0 ? (s.days < 0 ? t('overdue since {0}', fmtDate(s.date)) : t('due {0}', fmtDate(s.date))) : s.next ? t('next {0}', fmtDate(s.next)) : s.date ? t('finished') : '', b.auto ? t('adds itself') : ''].filter(Boolean).join(' · ');
 function billSheet(b) {
   // The next payment to come (an overdue one stays), and how many are left of an instalment.
-  const tdy = today(), s = billStatus(b, tdy, S.tx), next = (s.date && !s.paid ? s.date : s.next) || b.start || tdy;
+  const tdy = today(), s = billStatus(b, tdy, S.tx), next = (!b.id ? '' : s.date && !s.paid ? s.date : s.next) || b.start || tdy;
   const left = b.count ? billDates(b, '9999-12-31').filter(d => d >= next).length : '';
   const freqs = [['monthly', t('Every month')], ['weekly', t('Every week')], ['yearly', t('Every year')]];
   openSheet(`<h2 class="sh-title">${esc(b.id ? t('Edit bill') : t('Add a bill'))}</h2>
@@ -450,6 +459,7 @@ export const act = {
     el.addEventListener('click', e => { const x = e.target.closest('[data-x]')?.dataset.x; if (x) done(x === 'ok'); });
     el.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); done(true); } });
   },
+  'tx-pickname': b => { const el = $('#tx-merchant'); el.value = b.dataset.n; el.dispatchEvent(new Event('input', { bubbles: true })); $('#tx-sugg').hidden = true; el.focus(); },
   'tx-cat': b => { readForm(); catPicked = true; if (b.dataset.c !== draft.category) draft.sub = on('subcats') ? subFor(b.dataset.c, draft.merchant, [], S.kv.subRules) || undefined : undefined; draft.category = b.dataset.c; if (draft.items?.length) draft.items.forEach(i => { i.category = b.dataset.c; }); reopen(); },
   // Several things in one payment (a phone and fish at the mall): list them and each is sorted into its category.
   'tx-split': async () => {
@@ -469,6 +479,9 @@ export const act = {
     if (!(draft.amount > 0 || (draft.split && draft.amount === 0))) { $('#tx-amt')?.setAttribute('aria-invalid', 'true'); $('#tx-amt')?.focus(); return err(amtErr($('#tx-amt')?.value)); }
     if (!validIso(draft.date)) return err(t('Pick a date.'));
     if (draft.date > today() && !draft.bill) return err(t("That date hasn't come yet. Pick today or an earlier day."));
+    if ($('#tx-time')?.value.trim() && !draft.time) { $('#tx-time').focus(); return err(t('Time looks wrong. Try 14:30.')); }
+    const bought = draft.refundOf && S.tx.find(y => y.id === draft.refundOf);
+    if (bought && draft.amount > bought.amount) return err(t("A refund can't be more than the purchase ({0}).", fmtRM(bought.amount)));
     if (draft.type === 'transfer' && (!draft.toAccountId || draft.toAccountId === draft.accountId)) return err(t('Pick two different accounts.'));
     if ($('#tx-toamt') && !(draft.toAmount > 0)) { $('#tx-toamt').focus(); return err(t('Enter the amount that arrived.')); }
     const isNew = !draftBase && !S.tx.some(x => x.id === draft.id);

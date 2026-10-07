@@ -1016,3 +1016,17 @@ body.calc-on :is(input, select) { scroll-margin-bottom: 72px; }   /* the calcula
 .read-cancel .btn { flex: 1 1 8rem; min-width: 0; min-height: 44px; overflow-wrap: anywhere; }
 .goalact { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--sp-2); }
 .goalact .goaladd { flex: 1 1 8rem; min-width: 0; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+
+/* Dropdowns and date fields: one modern look. The native element stays the source of truth (native pickers, a11y, change events). */
+select:not([multiple]) { appearance: none; -webkit-appearance: none; cursor: pointer; text-overflow: ellipsis;
+  padding-inline-end: 34px; background-repeat: no-repeat; background-position: right 12px center; background-size: 14px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%238A94AB' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 6l4.5 4.5L12.5 6'/%3E%3C/svg%3E"); }
+select:not([multiple]):dir(rtl) { background-position: left 12px center; padding-inline: 34px 10px; }
+select:not([multiple]):disabled { cursor: not-allowed; opacity: .55; }
+input[type=date] { appearance: none; -webkit-appearance: none; text-align: start; }
+input[type=date]::-webkit-calendar-picker-indicator { cursor: pointer; opacity: .7; padding: 6px; margin-inline-end: -4px; border-radius: 8px; }
+input[type=date]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
+input[type=date]::-webkit-date-and-time-value { text-align: start; }
+select:focus-visible, input[type=date]:focus-visible { border-color: var(--accent); outline: 2px solid var(--accent); outline-offset: 1px; }
+select option { background: var(--panel, var(--bg)); color: var(--ink); }
+@media (prefers-reduced-motion: no-preference) { select, input[type=date] { transition: border-color .15s, box-shadow .15s; } }

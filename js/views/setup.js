@@ -88,7 +88,7 @@ const pickAccent = async () => {
   render(); $('[data-act="accent-custom"]')?.focus();
 };
 /** Add a category: its name, and a colour from the picker (the sheet comes back with the name kept). */
-const catAddSheet = (name = '', color = nextColor(S.kv.customCats.map(c => c.color))) => openSheet(`<h2 class="sh-title">${esc(t('Add a category'))}</h2><label class="field"><span>${esc(t('Name'))}</span><input id="cat-name" maxlength="40" value="${esc(name)}"${name ? '' : ' autofocus'}></label>
+const catAddSheet = (name = '', color = nextColor(S.kv.customCats.map(c => c.color))) => openSheet(`<h2 class="sh-title">${esc(t('Add a category'))}</h2><label class="field"><span>${esc(t('Name'))}</span><input id="cat-name" autocomplete="off" maxlength="40" value="${esc(name)}"${name ? '' : ' autofocus'}></label>
     <div class="lookrow"><span>${esc(t('Colour'))}</span><ul class="chips"><li><button class="chip dotbtn" id="cat-color" data-act="cat-add-color" data-v="${esc(color)}"${name ? ' autofocus' : ''}><span class="dot" style="background:${esc(color)}"></span><span class="num">${esc(color)}</span></button></li></ul></div>
     <button class="btn wide" data-act="cat-save">${esc(t('Save'))}</button>`, { label: t('Category') });
 
@@ -187,7 +187,7 @@ export const welcomeView = {
 function accountSheet(a = {}, stack = false) {
   const isNew = !a.id, now = isNew ? null : balances([a], S.tx, today()).by[a.id], cur = a.currency || 'MYR';
   openSheet(`<h2 class="sh-title">${esc(isNew ? t('Add an account') : t('Edit account'))}</h2>
-    <label class="field"><span>${esc(t('Name'))}</span><input id="ac-name" maxlength="60" value="${esc(a.name || '')}" placeholder="${esc(t('e.g. Maybank, Cash, Touch \'n Go'))}"${isNew ? ' autofocus' : ''}></label>
+    <label class="field"><span>${esc(t('Name'))}</span><input id="ac-name" autocomplete="off" maxlength="60" value="${esc(a.name || '')}" placeholder="${esc(t('e.g. Maybank, Cash, Touch \'n Go'))}"${isNew ? ' autofocus' : ''}></label>
     ${isNew ? '' : `<label class="field"><span>${esc(isFx(a) ? t('Balance today ({0})', cur) : t('Balance today (RM)'))}</span><input id="ac-now" inputmode="decimal" data-now="${now}" value="${(now / 100).toFixed(2)}" autofocus><small>${esc(t('Type what your bank or wallet app shows. Tally moves the starting balance to match, so nothing counts as spending.'))}</small></label>`}
     <div class="grid2"><label class="field"${on('currencies') || isFx(a) ? '' : ' hidden'}><span>${esc(t('Currency'))}</span><select id="ac-cur" data-input="ac-cur">${['MYR', ...Object.keys(FX_START)].map(c => `<option${cur === c ? ' selected' : ''}>${c}</option>`).join('')}</select></label>
       <label class="field" id="ac-rate-f"${isFx(a) ? '' : ' hidden'}><span>${esc(t('RM for 1 {0}', isFx(a) ? a.currency : 'SGD'))}</span><input id="ac-rate" inputmode="decimal" value="${isFx(a) ? rateOf(a) : ''}"><button type="button" class="link" data-act="rate-get">${esc(t("Get today's rate"))}</button><small class="fine" id="rate-src" role="status"></small></label></div>
@@ -217,7 +217,7 @@ let findQ = '', hits = [];
 /** Each card's title and the labels in it (once each per card; an icon button by its name), with the element to show. */
 const findables = () => $$('#view .card').flatMap(card => {
   const title = card.querySelector('h2, summary .lbl')?.textContent.trim() || '', seen = new Set();
-  return [[title, card], ...$$('label.toggle b, label.field > span, .rowb b, .lookrow > span, summary, .btn, .segs [aria-label]', card).map(el => [(el.matches('.segs *') && el.getAttribute('aria-label')) || el.textContent.trim(), el])]
+  return [[title, card], ...$$('label.toggle b, label.field > span, .rowb b, .lookrow > span, summary, .btn, .segs, .segs [aria-label]', card).map(el => [(el.matches('.segs, .segs *') && el.getAttribute('aria-label')) || el.textContent.trim(), el])]
     .filter(([s]) => s && !seen.has(s) && seen.add(s)).map(([s, el]) => ({ s, el, card: title }));
 });
 function findSettings() {
@@ -419,7 +419,7 @@ function importSheet() {
     <h3>${esc(t('From Google Sheets'))}</h3>
     <label class="field"><span>${esc(t('Paste the cells (select all in the sheet, copy, paste here)'))}</span><textarea id="imp-paste" rows="4" placeholder="Date	Amount	Category	Note"></textarea></label>
     <button class="btn ghost wide" data-act="imp-paste">${esc(t('Use pasted cells'))}</button>
-    <label class="field"><span>${esc(t('Or paste the sheet link (sharing must be "Anyone with the link")'))}</span><input id="imp-link" inputmode="url" placeholder="https://docs.google.com/spreadsheets/d/…"></label>
+    <label class="field"><span>${esc(t('Or paste the sheet link (sharing must be "Anyone with the link")'))}</span><input id="imp-link" autocomplete="off" inputmode="url" placeholder="https://docs.google.com/spreadsheets/d/…"></label>
     <button class="btn ghost wide" data-act="imp-link">${esc(t('Fetch from Google Sheets'))}</button>`, { label: t('Import') });
   $('#imp-file').addEventListener('change', e => { const f = e.target.files[0]; if (f) importFile(f); });
 }
@@ -623,7 +623,7 @@ function showMapping() {
   const dates = fresh.map(x => x.date).sort(), sum = k => fresh.filter(x => x.type === k).reduce((s, x) => s + x.amount, 0);
   const choices = catChoices(), cats = [...expenseCats(), ...INCOME_CATEGORIES], tabs = IMP.tabs;
   const intoAcc = `<label class="field"><span>${esc(map.account != null ? t('Rows without an account go into') : t('Into account'))}</span><select data-input="imp-acc">${S.accounts.filter(a => !owing(a)).map(a => `<option value="${esc(a.id)}"${IMP.accountId === a.id ? ' selected' : ''}>${esc(a.name)}</option>`).join('')}<option value="new"${IMP.accountId === 'new' ? ' selected' : ''}>${esc(t('A new account'))}</option></select></label>
-    ${IMP.accountId === 'new' ? `<label class="field"><span>${esc(t('Name of the new account'))}</span><input data-input="imp-accname" maxlength="40" value="${esc(newAccName())}"></label>
+    ${IMP.accountId === 'new' ? `<label class="field"><span>${esc(t('Name of the new account'))}</span><input data-input="imp-accname" autocomplete="off" maxlength="40" value="${esc(newAccName())}"></label>
       <label class="check"><input type="checkbox" data-input="imp-joint"${IMP.joint ? ' checked' : ''}> ${esc(t('Joint (shared with my partner)'))}</label>
       ${opening != null ? `<p class="fine">${esc(t('Opening balance {0}, worked out from the Balance column so the account matches your statement.', fmtRM(opening)))}</p>` : ''}` : ''}`;
   openSheet(`<h2 class="sh-title">${esc(t('Match the columns'))}</h2><p class="fine">${esc(IMP.name || '')} · ${esc(rows.length === 1 ? t('1 row') : t('{0} rows', rows.length))}</p>
@@ -1174,7 +1174,7 @@ export const act = {
     const el = openSheet(`<div class="sheethead"><h2 class="sh-title">${esc(t('Receipt photos'))}</h2><button class="icon-btn" data-act="sheet-close" aria-label="${esc(t('Close'))}">${ICON.x}</button></div>
       <p class="sh-body">${esc(t('Deleting a photo keeps its entry: the shop, date, amount and items stay. Only the picture goes.'))}</p>
       <label class="field"><span>${esc(t('Keep receipt photos'))}</span><select id="ph-keep">${[[0, t('Always')], [365, t('1 year')], [90, t('90 days')], [30, t('30 days')]].map(([v, l]) => `<option value="${v}"${v === keep ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
-      <p class="fine">${esc(t('Older photos are deleted when Tally starts.'))}</p>
+      ${keep ? `<p class="fine">${esc(t('Older photos are deleted when Tally starts.'))}</p>` : ''}
       <p class="warnbox">${esc(t('LHDN can ask for the receipts behind a relief claim for 7 years after the end of the year you file that return. Photos Tally matched to a relief are kept until then, even if you choose to delete older photos. Keep the original receipt or e-Invoice too: a phone photo is a backup, not a replacement.'))}</p>
       ${years.map(y => `<button class="btn ghost wide" data-act="relief-dl" data-y="${y}">${ICON.download}${esc(t('Download the receipts for {0}', y))}</button>`).join('')}
       ${n ? `<button class="btn ghost danger wide" data-act="photos-drop">${ICON.trash}${esc(t('Delete all {0} receipt photos now', n))}</button>` : ''}`, { label: t('Receipt photos') });
@@ -1247,7 +1247,7 @@ export const act = {
       <label class="field"><span>${esc(t('Cash in wallet (RM)'))}</span><input id="sf-cash" inputmode="decimal" placeholder="0.00" autofocus></label>
       <label class="field"><span>${esc(t('Bank account (RM)'))}</span><input id="sf-bank" inputmode="decimal" placeholder="0.00"></label>
       <div class="grid2 keep2"><label class="field"><span>${esc(t('E-wallet (RM), optional'))}</span><input id="sf-ewallet" inputmode="decimal" placeholder="${esc(t('leave empty to skip'))}"></label>
-      <label class="field"><span>${esc(t('Its name'))}</span><input id="sf-ewname" maxlength="40" placeholder="Touch 'n Go"></label></div>
+      <label class="field"><span>${esc(t('Its name'))}</span><input id="sf-ewname" autocomplete="off" maxlength="40" placeholder="Touch 'n Go"></label></div>
       ${on('business') ? `<label class="field"><span>${esc(t('Business money: a stall, rides or a shop (RM), optional'))}</span><input id="sf-biz" inputmode="decimal" placeholder="${esc(t('leave empty to skip'))}"></label>` : ''}
       <label class="field" hidden><span>${esc(t('Joint account with your partner (RM), optional'))}</span><input id="sf-joint" inputmode="decimal" placeholder="${esc(t('leave empty to skip'))}"></label>
       <p class="err" id="sf-err" role="alert"></p><button class="btn wide" data-act="sf-go">${esc(t('Start'))}</button>`, { label: t('Your accounts') });
@@ -1284,6 +1284,7 @@ export const act = {
     if (nowEl && nowEl.value.trim() && target == null) return ($('#ac-err').textContent = amtErr(nowEl.value));
     if (target != null && target !== was) opening = (S.accounts.find(a => a.id === b.dataset.id)?.opening || 0) + target - was;
     if (!name) return ($('#ac-err').textContent = t('Give the account a name.'));
+    if (S.accounts.some(a => a.id !== b.dataset.id && a.name.trim().toLowerCase() === name.toLowerCase())) return ($('#ac-err').textContent = t('You already have an account with that name.'));
     if (opening == null) return ($('#ac-err').textContent = amtErr($('#ac-open').value));
     const old = S.accounts.find(a => a.id === b.dataset.id), kind = $('#ac-kind').value, scope = ['joint', 'business'].includes($('#ac-scope').value) ? $('#ac-scope').value : 'personal';
     const currency = $('#ac-cur').value, rate = currency === 'MYR' ? null : +String($('#ac-rate').value).replace(',', '.');
@@ -1313,7 +1314,8 @@ export const act = {
   'cat-add': () => catAddSheet(),
   'cat-add-color': async b => { const name = $('#cat-name').value; catAddSheet(name, (await pickColor({ value: b.dataset.v })) || b.dataset.v); },
   'cat-save': async () => {
-    const n = $('#cat-name').value.trim(); if (!n) return;
+    const n = $('#cat-name').value.trim(); if (!n) { $('#cat-name').focus(); return toast(t('Give the category a name.'), { k: 'warn' }); }
+    if (expenseCats().some(c => !c.id.startsWith('c_') && t(c.name).toLowerCase() === n.toLowerCase())) return toast(t('You already have a category with that name.'), { k: 'warn' });
     try { await addCategory(n, $('#cat-color').dataset.v); } catch (e) { return toast(t(e.message), { k: 'warn' }); }   // 50 of the user's own at most
     closeSheet(); render(); toast(t('Saved'));
   },

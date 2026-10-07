@@ -141,7 +141,7 @@ export function openSplit(tx) {
       ${paidSum !== o.amount ? `<p class="err" role="alert">${esc(t('What everyone paid must add up to {0}.', fmtRM(o.amount)))}</p>` : ''}` : ''}` : ''}
       <ul class="relief sp-items">${items.map((it, n) => `<li><button type="button" class="rbtn${who[n].includes(current) ? ' on' : ''}" data-i="${n}" aria-pressed="${who[n].includes(current)}"><span class="rowb"><b>${esc(it.name)}</b><span class="num">${esc(fmtRM(it.cents))}</span></span>
         <small>${esc(who[n].length ? who[n].map(name).join(', ') : it.extra ? t('With the food') : t('Everyone'))}</small></button></li>`).join('')}</ul>
-      <ul class="list sp-sum">${people.map(p => `<li class="rowb"><span>${esc(name(p))}${payers.includes(p) && people.length > 1 ? ` <small class="pill">${esc(t('paid'))}</small>` : ''}</span><b class="num">${esc(fmtRM(owe[p]))}</b></li>`).join('')}
+      <ul class="list sp-sum">${people.map(p => `<li class="rowb"><span>${esc(name(p))}${paidOf(p) > 0 && people.length > 1 ? ` <small class="pill">${esc(t('paid'))}</small>` : ''}</span><b class="num">${esc(fmtRM(owe[p]))}</b></li>`).join('')}
         ${people.length > 1 && myNet !== 0 ? `<li class="rowb sp-owed"><span>${esc(myNet < 0 ? t('Owed to you') : t('You owe {0}', top))}</span><b class="num">${esc(fmtRM(Math.abs(myNet)))}</b></li>` : ''}</ul>`;
   };
   // A share in another currency would land in the RM accounts of what is owed: that one is shared, not saved.
