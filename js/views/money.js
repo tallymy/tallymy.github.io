@@ -222,7 +222,7 @@ function sheetHtml() {
     <div class="row2 sheetfoot">${isNew ? `<button class="btn ghost" data-act="sheet-close">${esc(t('Cancel'))}</button>` : `<button class="btn ghost danger" data-act="tx-del">${ICON.trash}${esc(t('Delete'))}</button>`}<button class="btn" data-act="tx-save">${esc(t('Save'))}</button></div>`;
 }
 /** Shop and note names typed before (imports too), most used first, for the name field's suggestions. */
-// In-page suggestions instead of a native <datalist>: its popup swallowed taps meant for typing and Back closed the whole sheet.
+// In-page suggestion chips instead of the browser's own autocomplete popup: its popup swallowed taps meant for typing and Back closed the whole sheet.
 const suggest = el => {
   const box = $('#tx-sugg'), q = el.value.trim().toLowerCase();
   if (!box) return;
