@@ -481,7 +481,7 @@ export const act = {
     if (draft.date > today() && !draft.bill) return err(t("That date hasn't come yet. Pick today or an earlier day."));
     if ($('#tx-time')?.value.trim() && !draft.time) { $('#tx-time').focus(); return err(t('Time looks wrong. Try 14:30.')); }
     const bought = draft.refundOf && S.tx.find(y => y.id === draft.refundOf);
-    if (bought && draft.amount > bought.amount) return err(t("A refund can't be more than the purchase ({0}).", fmtRM(bought.amount)));
+    if (bought && (accOf(bought.accountId)?.currency || 'MYR') === (accOf(draft.accountId)?.currency || 'MYR') && draft.amount > bought.amount) return err(t("A refund can't be more than the purchase ({0}).", fmtRM(bought.amount)));
     if (draft.type === 'transfer' && (!draft.toAccountId || draft.toAccountId === draft.accountId)) return err(t('Pick two different accounts.'));
     if ($('#tx-toamt') && !(draft.toAmount > 0)) { $('#tx-toamt').focus(); return err(t('Enter the amount that arrived.')); }
     const isNew = !draftBase && !S.tx.some(x => x.id === draft.id);

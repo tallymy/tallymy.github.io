@@ -1285,7 +1285,7 @@ export const act = {
     if (nowEl && nowEl.value.trim() && target == null) return ($('#ac-err').textContent = amtErr(nowEl.value));
     if (target != null && target !== was) opening = (S.accounts.find(a => a.id === b.dataset.id)?.opening || 0) + target - was;
     if (!name) return ($('#ac-err').textContent = t('Give the account a name.'));
-    if (S.accounts.some(a => a.id !== b.dataset.id && a.name.trim().toLowerCase() === name.toLowerCase())) return ($('#ac-err').textContent = t('You already have an account with that name.'));
+    if (S.accounts.some(a => !owing(a) && a.id !== b.dataset.id && a.name.trim().toLowerCase() === name.toLowerCase())) return ($('#ac-err').textContent = t('You already have an account with that name.'));
     if (opening == null) return ($('#ac-err').textContent = amtErr($('#ac-open').value));
     const old = S.accounts.find(a => a.id === b.dataset.id), kind = $('#ac-kind').value, scope = ['joint', 'business'].includes($('#ac-scope').value) ? $('#ac-scope').value : 'personal';
     const currency = $('#ac-cur').value, rate = currency === 'MYR' ? null : +String($('#ac-rate').value).replace(',', '.');
